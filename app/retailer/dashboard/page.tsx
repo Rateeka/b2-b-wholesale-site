@@ -57,7 +57,7 @@ export default function RetailerDashboard() {
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-secondary mb-2">Welcome Back</h1>
-        <p className="text-gray-600">Manage your wholesale orders and track inventory</p>
+        <p className="text-gray-600">Manage your orders and track inventory</p>
       </div>
 
       {/* Stats Grid */}

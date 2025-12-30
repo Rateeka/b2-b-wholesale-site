@@ -13,9 +13,9 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-primary rounded-sm flex items-center justify-center text-white font-bold">
-              B2B
+              T
             </div>
-            <h1 className="text-lg font-bold text-secondary">Wholesale OMS</h1>
+            <h1 className="text-lg font-bold text-secondary">Teetoz</h1>
           </div>
           <nav className="flex items-center gap-6">
             <Link href="/login" className="btn-ghost">
@@ -34,7 +34,7 @@ export default function LandingPage() {
           <div className="max-w-7xl mx-auto px-6">
             <div className="max-w-3xl">
               <h2 className="text-4xl font-bold text-secondary mb-6 text-balance">
-                Streamlined B2B Wholesale Ordering for Indian Food Distribution
+                Streamlined Ordering for Indian Food Distribution
               </h2>
               <p className="text-lg text-gray-600 mb-8 leading-relaxed">
                 Real-time inventory, tiered pricing, and order tracking for verified retailers across Canada. Bulk
@@ -66,7 +66,7 @@ export default function LandingPage() {
                 {
                   icon: Lock,
                   title: "Verified Access",
-                  desc: "Secure authentication restricted to approved wholesale retailers",
+                  desc: "Secure authentication restricted to approved retailers",
                 },
                 {
                   icon: BarChart3,
@@ -95,7 +95,7 @@ export default function LandingPage() {
                 <h3 className="text-3xl font-bold text-secondary mb-6">For Retailers</h3>
                 <ul className="space-y-4">
                   {[
-                    "Browse wholesale pricing instantly",
+                    "Browse pricing instantly",
                     "Track orders in real-time",
                     "Access tiered discounts automatically",
                     "Manage bulk orders effortlessly",
@@ -144,7 +144,7 @@ export default function LandingPage() {
         {/* CTA Section */}
         <section className="bg-secondary text-white py-16">
           <div className="max-w-7xl mx-auto px-6 text-center">
-            <h3 className="text-3xl font-bold mb-4">Ready to Transform Your Wholesale Operations?</h3>
+            <h3 className="text-3xl font-bold mb-4">Ready to Transform Your Operations?</h3>
             <p className="text-lg mb-8">Join verified retailers across Canada managing their orders efficiently.</p>
             <Link href="/register" className="btn-primary">
               Sign Up Now
@@ -218,7 +218,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="border-t border-border pt-6 text-center text-sm text-gray-600">
-            <p>&copy; 2025 B2B Wholesale OMS. All rights reserved.</p>
+            <p>&copy; 2025 Teetoz. All rights reserved.</p>
           </div>
         </div>
       </footer>

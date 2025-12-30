@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* B2B Wholesale OMS Color System */
+  /* Teetoz Color System */
   --primary: #d35400;
   --secondary: #2c3e50;
   --background: #ffffff;
@@ -134,7 +134,7 @@
     @apply bg-background text-foreground;
   }
 
-  /* B2B Design System Components */
+  /* Teetoz Design System Components */
 
   /* Card Component */
   .card {

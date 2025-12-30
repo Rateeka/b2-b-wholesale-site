@@ -8,9 +8,9 @@ const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "B2B Wholesale OMS - Indian Food Distribution",
+  title: "Teetoz - Indian Food Distribution",
   description:
-    "Centralized B2B Order Management System for verified retailers. Real-time inventory, tiered pricing, and streamlined logistics for Indian food distribution across Canada.",
+    "Centralized Order Management System for verified retailers. Real-time inventory, tiered pricing, and streamlined logistics for Indian food distribution across Canada.",
   generator: "v0.app",
   icons: {
     icon: [

@@ -1,4 +1,4 @@
-// Mock data for the B2B platform
+// Mock data for the Teetoz platform
 
 export const products = [
   {

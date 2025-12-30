@@ -41,9 +41,9 @@ export default function RetailerLayout({ children }) {
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-primary rounded-sm flex items-center justify-center text-white font-bold text-sm">
-                B2B
+                T
               </div>
-              <span className="font-bold text-secondary text-lg">Wholesale</span>
+              <span className="font-bold text-secondary text-lg">Teetoz</span>
             </div>
             <nav className="hidden md:flex items-center gap-6">
               {navItems.map((item) => (

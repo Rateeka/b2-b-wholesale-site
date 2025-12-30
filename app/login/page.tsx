@@ -44,9 +44,9 @@ export default function LoginPage() {
         <div className="card">
           <div className="flex items-center gap-2 mb-8">
             <div className="w-8 h-8 bg-primary rounded-sm flex items-center justify-center text-white font-bold">
-              B2B
+              T
             </div>
-            <h1 className="text-2xl font-bold text-secondary">Wholesale OMS</h1>
+            <h1 className="text-2xl font-bold text-secondary">Teetoz</h1>
           </div>
 
           <h2 className="text-2xl font-bold text-secondary mb-6">Sign In</h2>
