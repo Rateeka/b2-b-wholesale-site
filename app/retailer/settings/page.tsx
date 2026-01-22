@@ -1,27 +1,81 @@
 "use client"
 
-import { useState } from "react"
-import { CheckCircle } from "lucide-react"
+import { useState, useEffect } from "react"
+import { CheckCircle, Loader2, AlertCircle } from "lucide-react"
+import { useUser } from "@/hooks/use-user"
+import { updateStore, ApiError } from "@/lib/api-client"
 
 export default function SettingsPage() {
+  const { store, refreshStore } = useUser()
   const [saved, setSaved] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
-    storeName: "Delhi Market - Toronto",
-    email: "demo@retailer.com",
-    phone: "+1 (416) 555-0123",
-    address: "123 Bloor Street West",
-    city: "Toronto",
-    province: "ON",
-    postalCode: "M4W 1A8",
+    name: "",
+    contact_email: "",
+    contact_phone: "",
+    address: "",
+    city: "",
+    province: "",
+    postal_code: "",
   })
 
-  const handleChange = (e) => {
+  useEffect(() => {
+    if (store) {
+      setFormData({
+        name: store.name || "",
+        contact_email: store.contact_email || "",
+        contact_phone: store.contact_phone || "",
+        address: store.address || "",
+        city: store.city || "",
+        province: store.province || "",
+        postal_code: store.postal_code || "",
+      })
+    }
+  }, [store])
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
-  const handleSave = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+  const handleSave = async () => {
+    if (!store) return
+
+    try {
+      setIsLoading(true)
+      setError(null)
+      await updateStore(store.store_id, formData)
+      await refreshStore()
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      console.error("Failed to save settings:", err)
+      setError(err instanceof ApiError ? err.message : "Failed to save settings")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCancel = () => {
+    if (store) {
+      setFormData({
+        name: store.name || "",
+        contact_email: store.contact_email || "",
+        contact_phone: store.contact_phone || "",
+        address: store.address || "",
+        city: store.city || "",
+        province: store.province || "",
+        postal_code: store.postal_code || "",
+      })
+    }
+  }
+
+  if (!store) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="animate-spin text-primary" size={48} />
+      </div>
+    )
   }
 
   return (
@@ -38,6 +92,18 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {error && (
+        <div className="card border-l-4 border-l-red-500">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="text-red-500" size={24} />
+            <div>
+              <p className="font-semibold text-secondary">Error Saving Settings</p>
+              <p className="text-sm text-gray-600">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-2xl">
         <div className="card">
           <h2 className="text-xl font-bold text-secondary mb-6">Store Information</h2>
@@ -47,8 +113,8 @@ export default function SettingsPage() {
               <label className="block text-sm font-bold text-secondary mb-2">Store Name</label>
               <input
                 type="text"
-                name="storeName"
-                value={formData.storeName}
+                name="name"
+                value={formData.name}
                 onChange={handleChange}
                 className="input w-full"
               />
@@ -58,8 +124,8 @@ export default function SettingsPage() {
               <label className="block text-sm font-bold text-secondary mb-2">Email Address</label>
               <input
                 type="email"
-                name="email"
-                value={formData.email}
+                name="contact_email"
+                value={formData.contact_email}
                 onChange={handleChange}
                 className="input w-full"
               />
@@ -67,7 +133,13 @@ export default function SettingsPage() {
 
             <div>
               <label className="block text-sm font-bold text-secondary mb-2">Phone Number</label>
-              <input type="tel" name="phone" value={formData.phone} onChange={handleChange} className="input w-full" />
+              <input 
+                type="tel" 
+                name="contact_phone" 
+                value={formData.contact_phone} 
+                onChange={handleChange} 
+                className="input w-full" 
+              />
             </div>
 
             <div>
@@ -84,7 +156,13 @@ export default function SettingsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-bold text-secondary mb-2">City</label>
-                <input type="text" name="city" value={formData.city} onChange={handleChange} className="input w-full" />
+                <input 
+                  type="text" 
+                  name="city" 
+                  value={formData.city} 
+                  onChange={handleChange} 
+                  className="input w-full" 
+                />
               </div>
 
               <div>
@@ -103,18 +181,29 @@ export default function SettingsPage() {
               <label className="block text-sm font-bold text-secondary mb-2">Postal Code</label>
               <input
                 type="text"
-                name="postalCode"
-                value={formData.postalCode}
+                name="postal_code"
+                value={formData.postal_code}
                 onChange={handleChange}
                 className="input w-full"
               />
             </div>
 
             <div className="pt-4 flex gap-3">
-              <button onClick={handleSave} className="btn-primary">
-                Save Changes
+              <button 
+                onClick={handleSave} 
+                disabled={isLoading}
+                className="btn-primary disabled:opacity-50 flex items-center gap-2"
+              >
+                {isLoading && <Loader2 className="animate-spin" size={16} />}
+                {isLoading ? "Saving..." : "Save Changes"}
               </button>
-              <button className="btn-secondary">Cancel</button>
+              <button 
+                onClick={handleCancel}
+                disabled={isLoading}
+                className="btn-secondary disabled:opacity-50"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
@@ -123,11 +212,43 @@ export default function SettingsPage() {
           <h2 className="text-xl font-bold text-secondary mb-4">Account Tier</h2>
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-bold text-secondary">Gold Tier</p>
-              <p className="text-sm text-gray-600">5% discount on all products</p>
+              <p className="font-bold text-secondary">
+                {store.tier.charAt(0).toUpperCase() + store.tier.slice(1)} Tier
+              </p>
+              <p className="text-sm text-gray-600">
+                {store.tier === 'bronze' && '5% discount on all products'}
+                {store.tier === 'silver' && '10% discount on all products'}
+                {store.tier === 'gold' && '15% discount on all products'}
+              </p>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-bold text-primary">GOLD</p>
+              <p className="text-2xl font-bold text-primary">
+                {store.tier.toUpperCase()}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="card mt-6">
+          <h2 className="text-xl font-bold text-secondary mb-4">Credit Information</h2>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">Credit Limit</span>
+              <span className="font-semibold text-secondary">
+                ${store.credit_limit.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">Credit Used</span>
+              <span className="font-semibold text-red-600">
+                ${store.credit_used.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="flex justify-between items-center pt-3 border-t border-border">
+              <span className="font-bold text-secondary">Credit Available</span>
+              <span className="font-bold text-primary text-lg">
+                ${store.credit_available.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
             </div>
           </div>
         </div>

@@ -2,66 +2,179 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { TrendingUp, ShoppingCart, AlertCircle } from "lucide-react"
-import { orders, invoices, products } from "@/lib/mock-data"
+import { TrendingUp, ShoppingCart, AlertCircle, CreditCard, DollarSign } from "lucide-react"
+import { fetchDashboardData, ApiError } from "@/lib/api-client"
+import { useUser } from "@/hooks/use-user"
 
 export default function RetailerDashboard() {
-  const [recentOrders, setRecentOrders] = useState([])
-  const [stats, setStats] = useState({
-    totalSpent: 0,
-    activeOrders: 0,
-    lowStockAlerts: 0,
-  })
+  const { store: userStore } = useUser()
+  const [dashboardData, setDashboardData] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const recent = orders.slice(0, 3)
-    setRecentOrders(recent)
+    const loadDashboard = async () => {
+      try {
+        console.log('[Dashboard] Starting to load dashboard data...')
+        setIsLoading(true)
+        const data = await fetchDashboardData()
+        console.log('[Dashboard] Data loaded:', data)
+        setDashboardData(data)
+        setError(null)
+      } catch (err) {
+        console.error('[Dashboard] Error loading dashboard:', err)
+        if (err instanceof ApiError) {
+          setError(err.message)
+        } else {
+          setError('Failed to load dashboard data')
+        }
+      } finally {
+        console.log('[Dashboard] Loading complete, setting isLoading to false')
+        setIsLoading(false)
+      }
+    }
 
-    const totalSpent = invoices.reduce((sum, inv) => sum + inv.amount, 0)
-    const activeOrders = orders.filter((o) => o.status === "processing" || o.status === "out_for_delivery").length
-    const lowStockAlerts = products.filter((p) => p.status === "low_stock" || p.status === "out_of_stock").length
-
-    setStats({ totalSpent, activeOrders, lowStockAlerts })
+    loadDashboard()
   }, [])
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-300 text-red-800 px-6 py-4 rounded-sm">
+        <p className="font-medium">Error loading dashboard</p>
+        <p className="text-sm mt-1">{error}</p>
+      </div>
+    )
+  }
+
+  if (!dashboardData) {
+    return null
+  }
+
+  const { store, stats, recent_orders, unpaid_invoices, low_stock_products } = dashboardData
+
+  const creditPercentage = (store.credit_used / store.credit_limit) * 100
+  const creditColor = creditPercentage > 90 ? 'bg-red-500' : creditPercentage > 75 ? 'bg-yellow-500' : 'bg-green-500'
+
   const statCards = [
-    { label: "Total Spent", value: `$${stats.totalSpent.toFixed(2)}`, icon: TrendingUp },
-    { label: "Active Orders", value: stats.activeOrders, icon: ShoppingCart },
-    { label: "Stock Alerts", value: stats.lowStockAlerts, icon: AlertCircle },
+    { 
+      label: "Total Spent", 
+      value: `$${stats.total_spent.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 
+      icon: DollarSign,
+      color: "text-green-600"
+    },
+    { 
+      label: "Active Orders", 
+      value: stats.active_orders, 
+      icon: ShoppingCart,
+      color: "text-blue-600"
+    },
+    { 
+      label: "Stock Alerts", 
+      value: stats.low_stock_alerts, 
+      icon: AlertCircle,
+      color: "text-orange-600"
+    },
+    { 
+      label: "Unpaid Invoices", 
+      value: stats.unpaid_invoices, 
+      icon: CreditCard,
+      color: "text-red-600"
+    },
   ]
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case "delivered":
         return "status-green"
-      case "out_for_delivery":
+      case "shipped":
         return "status-yellow"
+      case "confirmed":
+        return "status-blue"
       case "processing":
         return "status-yellow"
+      case "pending":
+        return "status-gray"
+      case "cancelled":
+        return "status-red"
       default:
         return "status-gray"
     }
   }
 
-  const getStatusLabel = (status) => {
-    const labels = {
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
       delivered: "Delivered",
-      out_for_delivery: "Out for Delivery",
+      shipped: "Shipped",
+      confirmed: "Confirmed",
       processing: "Processing",
       pending: "Pending",
+      cancelled: "Cancelled",
     }
     return labels[status] || status
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-CA', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
   }
 
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-secondary mb-2">Welcome Back</h1>
+        <h1 className="text-3xl font-bold text-secondary mb-2">Welcome Back{store?.name ? `, ${store.name}` : ''}</h1>
         <p className="text-gray-600">Manage your orders and track inventory</p>
+        {store?.tier && (
+          <p className="text-sm text-primary font-medium mt-1">
+            {store.tier.charAt(0).toUpperCase() + store.tier.slice(1)} Tier Member
+          </p>
+        )}
+      </div>
+
+      {/* Credit Limit Card */}
+      <div className="card bg-gradient-to-br from-primary/5 to-primary/10">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-sm text-gray-600 font-medium">Credit Available</p>
+            <p className="text-3xl font-bold text-secondary mt-1">
+              ${store.credit_available.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+          </div>
+          <CreditCard className="text-primary opacity-20" size={48} />
+        </div>
+        <div className="space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Credit Used</span>
+            <span className="font-medium">${store.credit_used.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div 
+              className={`${creditColor} h-2 rounded-full transition-all`}
+              style={{ width: `${Math.min(creditPercentage, 100)}%` }}
+            ></div>
+          </div>
+          <div className="flex justify-between text-xs text-gray-500">
+            <span>{creditPercentage.toFixed(1)}% used</span>
+            <span>Limit: ${store.credit_limit.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+        </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((stat, idx) => {
           const Icon = stat.icon
           return (
@@ -69,9 +182,9 @@ export default function RetailerDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600 font-medium">{stat.label}</p>
-                  <p className="text-2xl font-bold text-secondary mt-2">{stat.value}</p>
+                  <p className={`text-2xl font-bold mt-2 ${stat.color}`}>{stat.value}</p>
                 </div>
-                <Icon className="text-primary opacity-20" size={40} />
+                <Icon className={`${stat.color} opacity-20`} size={40} />
               </div>
             </div>
           )
@@ -100,35 +213,92 @@ export default function RetailerDashboard() {
           </Link>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-secondary text-white">
-                <th className="px-4 py-3 text-left text-sm font-bold">Order ID</th>
-                <th className="px-4 py-3 text-left text-sm font-bold">Date</th>
-                <th className="px-4 py-3 text-left text-sm font-bold">Items</th>
-                <th className="px-4 py-3 text-left text-sm font-bold">Total</th>
-                <th className="px-4 py-3 text-left text-sm font-bold">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentOrders.map((order) => (
-                <tr key={order.id} className="border-b border-border hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm font-medium text-primary">{order.id}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{order.date}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{order.items.length} items</td>
-                  <td className="px-4 py-3 text-sm font-bold">${order.total.toFixed(2)}</td>
-                  <td className="px-4 py-3">
-                    <span className={`status-badge ${getStatusColor(order.status)}`}>
-                      {getStatusLabel(order.status)}
-                    </span>
-                  </td>
+        {dashboardData.recent_orders.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <Package className="mx-auto mb-2 opacity-50" size={48} />
+            <p>No recent orders</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-secondary text-white">
+                  <th className="px-4 py-3 text-left text-sm font-bold">Order ID</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">Date</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">Items</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">Total</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {dashboardData.recent_orders.map((order) => (
+                  <tr key={order.order_number} className="border-b border-border hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium text-primary">#{order.order_number}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{formatDate(order.order_date)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{order.total_items} items</td>
+                    <td className="px-4 py-3 text-sm font-bold">${order.total_amount.toFixed(2)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`status-badge ${getStatusColor(order.status)}`}>
+                        {getStatusLabel(order.status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
+
+      {/* Unpaid Invoices */}
+      {dashboardData.unpaid_invoices.length > 0 && (
+        <div className="card border-l-4 border-l-red-500">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-secondary">Unpaid Invoices</h2>
+            <AlertCircle className="text-red-500" size={24} />
+          </div>
+          <div className="space-y-3">
+            {dashboardData.unpaid_invoices.map((invoice) => (
+              <div key={invoice.invoice_number} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <p className="font-medium text-secondary">Invoice #{invoice.invoice_number}</p>
+                  <p className="text-sm text-gray-600">Due: {formatDate(invoice.due_date)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-red-600">${invoice.amount_due.toFixed(2)}</p>
+                  {invoice.days_overdue > 0 && (
+                    <p className="text-xs text-red-500">{invoice.days_overdue} days overdue</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Low Stock Alerts */}
+      {dashboardData.low_stock_products.length > 0 && (
+        <div className="card border-l-4 border-l-yellow-500">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-secondary">Low Stock Alerts</h2>
+            <AlertCircle className="text-yellow-500" size={24} />
+          </div>
+          <div className="space-y-3">
+            {dashboardData.low_stock_products.map((product) => (
+              <div key={product.product_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex-1">
+                  <p className="font-medium text-secondary">{product.product_name}</p>
+                  <p className="text-sm text-gray-600">SKU: {product.sku}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-yellow-600">{product.current_stock} units</p>
+                  <p className="text-xs text-gray-500">Min: {product.reorder_level}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

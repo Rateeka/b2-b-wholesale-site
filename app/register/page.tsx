@@ -3,51 +3,78 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { signUp, createStore } from "@/lib/auth"
+import type { StoreType } from "@/lib/types"
 
 export default function RegisterPage() {
   const router = useRouter()
   const [formData, setFormData] = useState({
     storeName: "",
+    fullName: "",
     email: "",
     password: "",
     confirmPassword: "",
-    businessType: "",
+    businessType: "" as StoreType | "",
     city: "",
     phone: "",
+    address: "",
+    province: "",
+    postalCode: "",
   })
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
-  const handleChange = (e) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
     setLoading(true)
 
-    if (!formData.storeName || !formData.email || !formData.password || !formData.businessType || !formData.city) {
-      setError("Please fill in all required fields")
-      setLoading(false)
-      return
-    }
+    try {
+      // Validation
+      if (!formData.storeName || !formData.fullName || !formData.email || !formData.password || !formData.businessType || !formData.city) {
+        throw new Error("Please fill in all required fields")
+      }
 
-    if (formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match")
-      setLoading(false)
-      return
-    }
+      if (formData.password.length < 6) {
+        throw new Error("Password must be at least 6 characters")
+      }
 
-    // Simulate API call
-    setTimeout(() => {
-      localStorage.setItem(
-        "auth",
-        JSON.stringify({ email: formData.email, userType: "retailer", isAuthenticated: true }),
-      )
-      router.push("/retailer/dashboard")
+      if (formData.password !== formData.confirmPassword) {
+        throw new Error("Passwords do not match")
+      }
+
+      // Create user account
+      console.log('[REGISTER PAGE] Calling signUp...')
+      const { user, session } = await signUp(formData.email, formData.password, {
+        full_name: formData.fullName,
+        phone: formData.phone || undefined,
+      })
+      console.log('[REGISTER PAGE] signUp completed:', { 
+        hasUser: !!user, 
+        hasSession: !!session,
+        userId: user?.id 
+      })
+
+      // If session exists, user is auto-confirmed (email confirmation disabled)
+      if (session) {
+        console.log('[REGISTER PAGE] Session exists, redirecting to dashboard...')
+        router.refresh()
+        window.location.href = "/retailer/dashboard"
+      } else {
+        console.log('[REGISTER PAGE] No session, email confirmation required')
+        // Email confirmation is enabled
+        alert('Registration successful! Please check your email to confirm your account.')
+        router.push("/login")
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to register")
+    } finally {
       setLoading(false)
-    }, 800)
+    }
   }
 
   return (
@@ -80,6 +107,20 @@ export default function RegisterPage() {
                 onChange={handleChange}
                 placeholder="Your Store Name"
                 className="input w-full"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-secondary mb-2">Full Name *</label>
+              <input
+                type="text"
+                name="fullName"
+                value={formData.fullName}
+                onChange={handleChange}
+                placeholder="John Doe"
+                className="input w-full"
+                required
               />
             </div>
 
@@ -92,6 +133,7 @@ export default function RegisterPage() {
                 onChange={handleChange}
                 placeholder="you@example.com"
                 className="input w-full"
+                required
               />
             </div>
 
@@ -102,12 +144,13 @@ export default function RegisterPage() {
                 value={formData.businessType}
                 onChange={handleChange}
                 className="input w-full"
+                required
               >
                 <option value="">Select a type</option>
-                <option value="grocery">Grocery Store</option>
+                <option value="grocery_store">Grocery Store</option>
                 <option value="restaurant">Restaurant</option>
-                <option value="caterer">Catering Service</option>
                 <option value="distributor">Distributor</option>
+                <option value="other">Other</option>
               </select>
             </div>
 
@@ -118,9 +161,47 @@ export default function RegisterPage() {
                 name="city"
                 value={formData.city}
                 onChange={handleChange}
-                placeholder="Your City"
+                placeholder="Toronto"
+                className="input w-full"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-secondary mb-2">Address</label>
+              <input
+                type="text"
+                name="address"
+                value={formData.address}
+                onChange={handleChange}
+                placeholder="123 Main St"
                 className="input w-full"
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-secondary mb-2">Province</label>
+                <input
+                  type="text"
+                  name="province"
+                  value={formData.province}
+                  onChange={handleChange}
+                  placeholder="ON"
+                  className="input w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-secondary mb-2">Postal Code</label>
+                <input
+                  type="text"
+                  name="postalCode"
+                  value={formData.postalCode}
+                  onChange={handleChange}
+                  placeholder="M5V 3A8"
+                  className="input w-full"
+                />
+              </div>
             </div>
 
             <div>
@@ -144,7 +225,10 @@ export default function RegisterPage() {
                 onChange={handleChange}
                 placeholder="••••••••"
                 className="input w-full"
+                required
+                minLength={6}
               />
+              <p className="text-xs text-gray-500 mt-1">At least 6 characters</p>
             </div>
 
             <div>
@@ -156,11 +240,12 @@ export default function RegisterPage() {
                 onChange={handleChange}
                 placeholder="••••••••"
                 className="input w-full"
+                required
               />
             </div>
 
             <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50 mt-6">
-              {loading ? "Registering..." : "Register Store"}
+              {loading ? "Creating Account..." : "Register Store"}
             </button>
           </form>
 

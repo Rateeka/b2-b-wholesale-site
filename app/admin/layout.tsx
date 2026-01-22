@@ -4,25 +4,50 @@ import { useRouter, usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { LogOut, Menu, X } from "lucide-react"
+import { getCurrentUser, signOut, getUserRole } from "@/lib/auth"
 
 export default function AdminLayout({ children }) {
   const router = useRouter()
   const pathname = usePathname()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const auth = localStorage.getItem("auth")
-    if (!auth || JSON.parse(auth).userType !== "admin") {
-      router.push("/login")
-      return
+    const loadUser = async () => {
+      try {
+        console.log('[ADMIN LAYOUT] Loading user...')
+        const currentUser = await getCurrentUser()
+        console.log('[ADMIN LAYOUT] User loaded:', { hasUser: !!currentUser, userId: currentUser?.id, role: currentUser?.user_metadata?.role })
+        
+        if (currentUser) {
+          const role = getUserRole(currentUser)
+          if (role !== 'admin') {
+            console.log('[ADMIN LAYOUT] User is not admin, redirecting...')
+            router.push('/retailer/dashboard')
+            return
+          }
+        }
+        
+        setUser(currentUser)
+      } catch (error) {
+        console.error('[ADMIN LAYOUT] Error loading user:', error)
+        // Middleware will handle redirect to login
+      } finally {
+        setLoading(false)
+      }
     }
-    setUser(JSON.parse(auth))
+    loadUser()
   }, [router])
 
-  const handleLogout = () => {
-    localStorage.removeItem("auth")
-    router.push("/")
+  const handleLogout = async () => {
+    try {
+      console.log('[ADMIN LAYOUT] Logging out...')
+      await signOut()
+      router.push("/login")
+    } catch (error) {
+      console.error('[ADMIN LAYOUT] Logout error:', error)
+    }
   }
 
   const navItems = [
@@ -33,7 +58,19 @@ export default function AdminLayout({ children }) {
     { label: "Reports", href: "/admin/reports" },
   ]
 
-  if (!user) return null
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return null
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

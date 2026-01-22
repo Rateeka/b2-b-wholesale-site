@@ -1,28 +1,26 @@
 "use client"
 
 import { useRouter, usePathname } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { LogOut, Menu, X } from "lucide-react"
+import { signOut } from "@/lib/auth"
+import { UserProvider, useUser } from "@/hooks/use-user"
 
-export default function RetailerLayout({ children }) {
+function RetailerLayoutContent({ children }) {
   const router = useRouter()
   const pathname = usePathname()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [user, setUser] = useState(null)
+  const { user, store, isLoading: loading } = useUser()
 
-  useEffect(() => {
-    const auth = localStorage.getItem("auth")
-    if (!auth) {
+  const handleLogout = async () => {
+    try {
+      console.log('[RETAILER LAYOUT] Logging out...')
+      await signOut()
       router.push("/login")
-      return
+    } catch (error) {
+      console.error('[RETAILER LAYOUT] Logout error:', error)
     }
-    setUser(JSON.parse(auth))
-  }, [router])
-
-  const handleLogout = () => {
-    localStorage.removeItem("auth")
-    router.push("/")
   }
 
   const navItems = [
@@ -32,7 +30,19 @@ export default function RetailerLayout({ children }) {
     { label: "Settings", href: "/retailer/settings" },
   ]
 
-  if (!user) return null
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return null
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -97,5 +107,13 @@ export default function RetailerLayout({ children }) {
 
       <main className="max-w-7xl mx-auto px-6 py-12">{children}</main>
     </div>
+  )
+}
+
+export default function RetailerLayout({ children }) {
+  return (
+    <UserProvider>
+      <RetailerLayoutContent>{children}</RetailerLayoutContent>
+    </UserProvider>
   )
 }

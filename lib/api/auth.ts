@@ -1,0 +1,60 @@
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import type { Database } from '../types'
+
+export async function createServerSupabaseClient() {
+  const cookieStore = await cookies()
+  
+  return createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+}
+
+export async function getAuthUser() {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user }, error } = await supabase.auth.getUser()
+  
+  if (error || !user) {
+    return null
+  }
+  
+  return user
+}
+
+export async function requireAuth() {
+  const user = await getAuthUser()
+  
+  if (!user) {
+    throw new Error('Unauthorized')
+  }
+  
+  return user
+}
+
+export async function requireAdmin() {
+  const user = await requireAuth()
+  const role = user.user_metadata?.role || 'retailer'
+  
+  if (role !== 'admin') {
+    throw new Error('Forbidden: Admin access required')
+  }
+  
+  return user
+}
+
+export function getUserRole(user: any): 'admin' | 'retailer' | 'manager' {
+  return user?.user_metadata?.role || 'retailer'
+}
