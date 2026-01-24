@@ -5,8 +5,26 @@ import { parsePagination, calculatePagination } from '@/lib/api/pagination'
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthUser()
     const supabase = await createServerSupabaseClient()
+    
+    // CRITICAL: Must call getUser() to establish the auth session in Supabase
+    // This ensures auth.uid() is available in RLS policies
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError) {
+      console.error('[STORES API] Auth error:', authError)
+    }
+    
+    if (!user) {
+      console.error('[STORES API] No authenticated user')
+      return apiError('Unauthorized', 'UNAUTHORIZED', 401)
+    }
+    
+    console.log('[STORES API] Authenticated user:', user.id, 'Email:', user.email)
+    
+    // Debug: Check what auth.uid() sees in the database session
+    const { data: authDebug } = await supabase.rpc('debug_auth_context')
+    console.log('[STORES API] Database auth context:', authDebug)
     
     const { searchParams } = new URL(request.url)
     const { page, limit, offset } = parsePagination(searchParams)
@@ -17,52 +35,27 @@ export async function GET(request: NextRequest) {
     const storeType = searchParams.get('store_type')
     const search = searchParams.get('search')
     
-    // Retailers can only see their own store
-    // Admins can see all stores
-    let query = supabase
-      .from('stores')
-      .select('*', { count: 'exact' })
-    
-    // Apply RLS based on role
-    if (user) {
-      const { data: profile } = await supabase
-        .from('users')
-        .select('role, store_id')
-        .eq('id', user.id)
-        .single()
-      
-      if (profile?.role === 'retailer' && profile.store_id) {
-        query = query.eq('id', profile.store_id)
-      }
-    }
-    
-    // Apply filters
-    if (status) {
-      query = query.eq('status', status)
-    }
-    
-    if (tier) {
-      query = query.eq('tier', tier)
-    }
-    
-    if (storeType) {
-      query = query.eq('store_type', storeType)
-    }
-    
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`)
-    }
-    
-    // Apply pagination and sorting
-    const { data: stores, error, count } = await query
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+    // Use the database function instead of query builder
+    const { data: result, error } = await supabase.rpc('get_stores_for_user', {
+      p_status: status,
+      p_tier: tier,
+      p_store_type: storeType,
+      p_search: search,
+      p_limit: limit,
+      p_offset: offset
+    })
     
     if (error) {
+      console.error('[STORES API] Function error:', error)
       throw error
     }
     
-    const pagination = calculatePagination(count || 0, page, limit)
+    console.log('[STORES API] Function returned:', result)
+    
+    const stores = result?.stores || []
+    const totalCount = result?.total || 0
+    
+    const pagination = calculatePagination(Number(totalCount), page, limit)
     
     return apiSuccess({ stores, pagination })
     

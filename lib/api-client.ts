@@ -313,8 +313,8 @@ export async function fetchStores(params?: {
   }
   
   return {
-    stores: data.data.stores,
-    pagination: data.data.pagination
+    stores: data.data?.stores || data.data || [],
+    pagination: data.meta || data.data?.pagination
   }
 }
 

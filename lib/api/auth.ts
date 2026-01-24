@@ -4,8 +4,11 @@ import type { Database } from '../types'
 
 export async function createServerSupabaseClient() {
   const cookieStore = await cookies()
+  const allCookies = cookieStore.getAll()
   
-  return createServerClient<Database>(
+  console.log('[AUTH] Creating Supabase client with cookies:', allCookies.map(c => ({ name: c.name, value: c.value.substring(0, 50) + '...' })))
+  
+  const client = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -21,6 +24,16 @@ export async function createServerSupabaseClient() {
       },
     }
   )
+  
+  // Immediately verify the session is loaded
+  const { data: { session } } = await client.auth.getSession()
+  console.log('[AUTH] Session loaded:', { 
+    hasSession: !!session, 
+    userId: session?.user?.id,
+    accessToken: session?.access_token?.substring(0, 20) + '...'
+  })
+  
+  return client
 }
 
 export async function getAuthUser() {
