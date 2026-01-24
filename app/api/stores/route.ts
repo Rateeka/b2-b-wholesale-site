@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     
     // Validate required fields
-    const requiredFields = ['name', 'email', 'phone', 'address', 'city', 'province', 'postal_code']
+    const requiredFields = ['name', 'email', 'phone', 'address_line1', 'city', 'province', 'postal_code']
     const missingFields = requiredFields.filter(field => !body[field])
     
     if (missingFields.length > 0) {
@@ -146,7 +146,8 @@ export async function POST(request: NextRequest) {
         name: body.name,
         email: body.email,
         phone: body.phone,
-        address: body.address,
+        address_line1: body.address_line1,
+        address_line2: body.address_line2,
         city: body.city,
         province: body.province,
         postal_code: body.postal_code,

@@ -162,7 +162,13 @@ export default function StoresPage() {
 
                   <div>
                     <p className="text-xs font-bold text-secondary">Address</p>
-                    <p className="text-sm">{store.address}, {store.city}, {store.province} {store.postal_code}</p>
+                    <p className="text-sm">
+                      {store.address_line1}
+                      {store.address_line2 && `, ${store.address_line2}`}
+                      {store.city && `, ${store.city}`}
+                      {store.province && `, ${store.province}`}
+                      {store.postal_code && ` ${store.postal_code}`}
+                    </p>
                   </div>
 
                   <div className="bg-gray-50 p-3 rounded-sm">
