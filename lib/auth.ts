@@ -6,43 +6,24 @@ export async function signUp(email: string, password: string, userData: {
   full_name: string
   phone?: string
 }) {
-  console.log('[AUTH] signUp called with email:', email, 'userData:', userData)
   const supabase = createClient()
   
-  try {
-    console.log('[AUTH] Attempting signUp...')
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: userData.full_name,
-          phone: userData.phone,
-        }
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        full_name: userData.full_name,
+        phone: userData.phone,
+        role: 'retailer',
       }
-    })
-
-    console.log('[AUTH] signUp response:', { 
-      hasUser: !!data.user, 
-      hasSession: !!data.session,
-      error: error?.message 
-    })
-
-    if (error) {
-      console.error('[AUTH] Supabase signUp error:', error)
-      throw error
     }
-    if (!data.user) {
-      console.error('[AUTH] No user returned from signUp')
-      throw new Error('Failed to create user')
-    }
+  })
 
-    console.log('[AUTH] signUp successful, user ID:', data.user.id, 'hasSession:', !!data.session)
-    return { user: data.user, session: data.session }
-  } catch (error: any) {
-    console.error('[AUTH] Sign up error:', error)
-    throw new Error(error.message || 'Failed to sign up')
-  }
+  if (error) throw error
+  if (!data.user) throw new Error('Failed to create user')
+
+  return { user: data.user, session: data.session }
 }
 
 export async function signIn(email: string, password: string) {
@@ -113,25 +94,38 @@ export async function createStore(userId: string, storeData: {
 }) {
   const supabase = createClient()
   
-  try {
-    const { data, error } = await supabase
-      .from('stores')
-      .insert({
-        user_id: userId,
-        ...storeData,
-        tier: 'standard' as StoreTier,
-        status: 'pending',
-      })
-      .select()
-      .single()
+  // Validate required fields
+  if (!storeData.name || !storeData.email || !storeData.store_type || !storeData.city) {
+    throw new Error('Missing required store information')
+  }
 
-    if (error) throw error
-    return data
-  } catch (error: any) {
-    console.error('Create store error:', error)
+  const { data, error } = await supabase
+    .from('stores')
+    .insert({
+      user_id: userId,
+      name: storeData.name,
+      email: storeData.email,
+      phone: storeData.phone || null,
+      store_type: storeData.store_type,
+      city: storeData.city,
+      address_line1: storeData.address_line1 || null,
+      address_line2: storeData.address_line2 || null,
+      province: storeData.province || 'ON',
+      postal_code: storeData.postal_code || null,
+      tier: 'standard' as StoreTier,
+      status: 'pending',
+    })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Store creation failed:', error)
     throw new Error(error.message || 'Failed to create store')
   }
+  
+  return data
 }
+
 
 export async function getStoreByUserId(userId: string) {
   const supabase = createClient()

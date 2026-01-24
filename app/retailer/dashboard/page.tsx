@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { TrendingUp, ShoppingCart, AlertCircle, CreditCard, DollarSign } from "lucide-react"
+import { TrendingUp, ShoppingCart, AlertCircle, CreditCard, DollarSign, Package } from "lucide-react"
 import { fetchDashboardData, ApiError } from "@/lib/api-client"
 import { useUser } from "@/hooks/use-user"
 

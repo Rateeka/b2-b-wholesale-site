@@ -47,31 +47,44 @@ export default function RegisterPage() {
         throw new Error("Passwords do not match")
       }
 
-      // Create user account
-      console.log('[REGISTER PAGE] Calling signUp...')
+      // Step 1: Create user account
       const { user, session } = await signUp(formData.email, formData.password, {
         full_name: formData.fullName,
         phone: formData.phone || undefined,
       })
-      console.log('[REGISTER PAGE] signUp completed:', { 
-        hasUser: !!user, 
-        hasSession: !!session,
-        userId: user?.id 
+
+      if (!user) {
+        throw new Error('User account creation failed')
+      }
+
+      // Step 2: Create store for the user
+      await createStore(user.id, {
+        name: formData.storeName,
+        email: formData.email,
+        phone: formData.phone,
+        address_line1: formData.address,
+        city: formData.city,
+        province: formData.province || 'ON',
+        postal_code: formData.postalCode,
+        store_type: formData.businessType as StoreType,
       })
 
-      // If session exists, user is auto-confirmed (email confirmation disabled)
+      // Step 3: Redirect based on session status
       if (session) {
-        console.log('[REGISTER PAGE] Session exists, redirecting to dashboard...')
-        router.refresh()
-        window.location.href = "/retailer/dashboard"
+        // Auto-confirmed, redirect to dashboard
+        router.push("/retailer/dashboard")
       } else {
-        console.log('[REGISTER PAGE] No session, email confirmation required')
-        // Email confirmation is enabled
+        // Email confirmation required
         alert('Registration successful! Please check your email to confirm your account.')
         router.push("/login")
       }
     } catch (err: any) {
-      setError(err.message || "Failed to register")
+      console.error('Registration error:', err)
+      if (err.message && err.message.includes("User already registered")) {
+        setError("Account already exists with this email. Please log in.")
+      } else {
+        setError(err.message || "Failed to register. Please try again.")
+      }
     } finally {
       setLoading(false)
     }
