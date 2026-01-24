@@ -1,28 +1,97 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Edit2, Save, X, AlertCircle } from "lucide-react"
-import { fetchProducts, updateProduct } from "@/lib/api-client"
+import { Edit2, Save, X, AlertCircle, Plus, Trash2, Search, Filter, ChevronLeft, ChevronRight } from "lucide-react"
+import { fetchProducts, updateProduct, createProduct, deleteProduct, bulkDeleteProducts, fetchCategories } from "@/lib/api-client"
+
+interface Category {
+  id: string
+  name: string
+  parent_id: string | null
+}
 
 export default function InventoryPage() {
+  // Data State
   const [products, setProducts] = useState<any[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editData, setEditData] = useState<any>({})
-  const [filter, setFilter] = useState("all")
+  
+  // Filter/Pagination State
+  const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [categoryFilter, setCategoryFilter] = useState("all")
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
+  
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<any | null>(null)
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([])
+  
+  // Form State
   const [saving, setSaving] = useState(false)
+  const [formData, setFormData] = useState({
+    sku: "",
+    name: "",
+    category_id: "",
+    description: "",
+    base_price: 0,
+    gold_price: 0,
+    silver_price: 0,
+    stock_quantity: 0,
+    low_stock_threshold: 10,
+    image_url: "",
+    is_active: true,
+    is_featured: false,
+    unit: "Piece"
+  })
 
+  // Load initial data
   useEffect(() => {
-    loadProducts()
-  }, [filter])
+    loadCategories()
+  }, [])
+
+  // Load products when filters change
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadProducts()
+    }, 500) // Debounce search
+    return () => clearTimeout(timer)
+  }, [page, statusFilter, categoryFilter, search])
+
+  const loadCategories = async () => {
+    try {
+      const data = await fetchCategories(true)
+      setCategories(data)
+    } catch (err: any) {
+      console.error('Failed to load categories', err)
+    }
+  }
 
   const loadProducts = async () => {
     try {
       setLoading(true)
-      const params = filter !== "all" ? { stock_status: filter } : {}
+      const params: any = {
+        page,
+        limit: 10,
+        sort: 'created_at',
+      }
+      
+      if (statusFilter !== "all") params.stock_status = statusFilter
+      if (categoryFilter !== "all") params.category_id = categoryFilter
+      if (search) params.search = search
+      
       const data = await fetchProducts(params)
-      setProducts(data.products)
+      setProducts(data.products || [])
+      
+      if (data.pagination) {
+        setTotalPages(data.pagination.totalPages)
+        setTotalCount(data.pagination.total)
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load products')
     } finally {
@@ -30,264 +99,626 @@ export default function InventoryPage() {
     }
   }
 
-  const handleEdit = (product: any) => {
-    setEditingId(product.id)
-    setEditData({
-      name: product.name,
-      sku: product.sku,
-      stock_quantity: product.stock_quantity,
-      base_price: product.base_price,
-      gold_price: product.gold_price,
-      silver_price: product.silver_price,
-      is_active: product.is_active,
+  const handleOpenCreate = () => {
+    setSelectedProduct(null)
+    setFormData({
+      sku: "",
+      name: "",
+      category_id: categories.length > 0 ? categories[0].id : "",
+      description: "",
+      base_price: 0,
+      gold_price: 0,
+      silver_price: 0,
+      stock_quantity: 0,
+      low_stock_threshold: 10,
+      image_url: "",
+      is_active: true,
+      is_featured: false,
+      unit: "Piece"
     })
+    setIsModalOpen(true)
   }
 
-  const handleSave = async () => {
-    if (!editingId) return
+  const handleOpenEdit = (product: any) => {
+    setSelectedProduct(product)
+    setFormData({
+      sku: product.sku,
+      name: product.name,
+      category_id: product.category_id || "",
+      description: product.description || "",
+      base_price: parseFloat(product.base_price),
+      gold_price: product.gold_price ? parseFloat(product.gold_price) : 0,
+      silver_price: product.silver_price ? parseFloat(product.silver_price) : 0,
+      stock_quantity: product.stock_quantity,
+      low_stock_threshold: product.low_stock_threshold || 10,
+      image_url: product.image_url || "",
+      is_active: product.is_active,
+      is_featured: product.featured || false,
+      unit: product.unit || "Piece"
+    })
+    setIsModalOpen(true)
+  }
 
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
     try {
-      setSaving(true)
-      await updateProduct(editingId, {
-        name: editData.name,
-        stock_quantity: editData.stock_quantity,
-        base_price: editData.base_price,
-        gold_price: editData.gold_price,
-        silver_price: editData.silver_price,
-        is_active: editData.is_active,
-      })
-      await loadProducts()
-      setEditingId(null)
+      if (selectedProduct) {
+        await updateProduct(selectedProduct.id, {
+          ...formData,
+          gold_price: formData.gold_price || null,
+          silver_price: formData.silver_price || null
+        })
+      } else {
+        await createProduct({
+          ...formData,
+          gold_price: formData.gold_price || undefined,
+          silver_price: formData.silver_price || undefined
+        })
+      }
+      setIsModalOpen(false)
+      loadProducts()
     } catch (err: any) {
-      alert(`Failed to update product: ${err.message}`)
+      alert(`Failed to save: ${err.message}`)
     } finally {
       setSaving(false)
     }
   }
 
-  const handleChange = (field: string, value: any) => {
-    setEditData({ ...editData, [field]: value })
+  const handleDelete = async () => {
+    if (!selectedProduct) return
+    setSaving(true)
+    try {
+      await deleteProduct(selectedProduct.id)
+      setIsDeleteModalOpen(false)
+      loadProducts()
+    } catch (err: any) {
+      alert(`Failed to delete: ${err.message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedProducts.length === 0) return
+    setSaving(true)
+    try {
+      await bulkDeleteProducts(selectedProducts)
+      setIsBulkDeleteModalOpen(false)
+      setSelectedProducts([])
+      loadProducts()
+    } catch (err: any) {
+      alert(`Failed to delete products: ${err.message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const toggleProductSelection = (productId: string) => {
+    setSelectedProducts(prev => 
+      prev.includes(productId) 
+        ? prev.filter(id => id !== productId)
+        : [...prev, productId]
+    )
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedProducts.length === products.length) {
+      setSelectedProducts([])
+    } else {
+      setSelectedProducts(products.map(p => p.id))
+    }
   }
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "in_stock":
-        return "status-green"
-      case "low_stock":
-        return "status-yellow"
-      case "out_of_stock":
-        return "status-red"
-      default:
-        return "status-gray"
+      case "in_stock": return "bg-green-100 text-green-800"
+      case "low_stock": return "bg-yellow-100 text-yellow-800"
+      case "out_of_stock": return "bg-red-100 text-red-800"
+      default: return "bg-gray-100 text-gray-800"
     }
-  }
-
-  const getStatusLabel = (status: string) => {
-    const labels: { [key: string]: string } = {
-      in_stock: "In Stock",
-      low_stock: "Low Stock",
-      out_of_stock: "Out of Stock",
-    }
-    return labels[status] || status
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          <p className="mt-4 text-gray-600">Loading inventory...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="card">
-        <div className="flex items-center gap-2 text-red-600">
-          <AlertCircle size={20} />
-          <p>Error: {error}</p>
-        </div>
-      </div>
-    )
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-secondary">Inventory Manager</h1>
-        <p className="text-gray-600">Manage stock levels, pricing, and product details</p>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white border border-border rounded-sm p-4">
-        <label className="block text-sm font-bold text-secondary mb-3">Filter by Status</label>
-        <div className="flex flex-wrap gap-2">
-          {["all", "in_stock", "low_stock", "out_of_stock"].map((status) => (
-            <button
-              key={status}
-              onClick={() => setFilter(status)}
-              className={`px-4 py-2 rounded-sm text-sm font-medium transition-all ${
-                filter === status ? "bg-primary text-white" : "bg-gray-100 text-secondary hover:bg-gray-200"
-              }`}
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-secondary">Inventory Manager</h1>
+          <p className="text-gray-600">Product catalog and stock management ({totalCount} items)</p>
+          {selectedProducts.length > 0 && (
+            <p className="text-sm text-primary font-medium mt-1">{selectedProducts.length} product(s) selected</p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          {selectedProducts.length > 0 && (
+            <button 
+              onClick={() => setIsBulkDeleteModalOpen(true)} 
+              className="btn bg-red-600 text-white hover:bg-red-700 flex items-center gap-2"
             >
-              {status === "all" ? "All" : getStatusLabel(status)}
+              <Trash2 size={20} />
+              Delete Selected ({selectedProducts.length})
             </button>
-          ))}
+          )}
+          <button onClick={handleOpenCreate} className="btn-primary flex items-center gap-2">
+            <Plus size={20} />
+            Add Product
+          </button>
         </div>
       </div>
 
-      {/* Inventory Table */}
-      <div className="card overflow-x-auto">
+      {/* Filters Bar */}
+      <div className="bg-white p-4 border border-border rounded-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="flex flex-1 gap-4 w-full md:w-auto">
+          <div className="relative flex-1 md:max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="text"
+              placeholder="Search products..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10 input-field w-full"
+            />
+          </div>
+          
+          <select 
+            value={statusFilter} 
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="input-field w-auto min-w-[150px]"
+          >
+            <option value="all">All Status</option>
+            <option value="in_stock">In Stock</option>
+            <option value="low_stock">Low Stock</option>
+            <option value="out_of_stock">Out of Stock</option>
+          </select>
+
+          <select 
+            value={categoryFilter} 
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="input-field w-auto min-w-[150px]"
+          >
+            <option value="all">All Categories</option>
+            {categories.map(cat => (
+              <option key={cat.id} value={cat.id}>{cat.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Products Table */}
+      <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead>
-            <tr className="bg-secondary text-white">
-              <th className="px-4 py-3 text-left text-sm font-bold">Product</th>
-              <th className="px-4 py-3 text-left text-sm font-bold">SKU</th>
-              <th className="px-4 py-3 text-left text-sm font-bold">Stock</th>
-              <th className="px-4 py-3 text-left text-sm font-bold">Base Price</th>
-              <th className="px-4 py-3 text-left text-sm font-bold">Gold Price</th>
-              <th className="px-4 py-3 text-left text-sm font-bold">Silver Price</th>
-              <th className="px-4 py-3 text-left text-sm font-bold">Status</th>
-              <th className="px-4 py-3 text-left text-sm font-bold">Active</th>
-              <th className="px-4 py-3 text-left text-sm font-bold">Action</th>
+          <thead className="bg-gray-50 border-b border-border">
+            <tr>
+              <th className="px-4 py-3 text-left">
+                <input
+                  type="checkbox"
+                  checked={products.length > 0 && selectedProducts.length === products.length}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
+                />
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Product</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">SKU</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Stock</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Prices (Base/Gold/Silver)</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+              <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
-          <tbody>
-            {products.length > 0 ? (
+          <tbody className="bg-white divide-y divide-gray-200">
+            {loading ? (
+              <tr><td colSpan={7} className="px-6 py-4 text-center">Loading...</td></tr>
+            ) : products.length === 0 ? (
+              <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-500">No products found</td></tr>
+            ) : (
               products.map((product) => (
-                <tr key={product.id} className="border-b border-border hover:bg-gray-50">
-                  {editingId === product.id ? (
-                    <>
-                      <td className="px-4 py-3 text-sm">
-                        <input
-                          type="text"
-                          value={editData.name}
-                          onChange={(e) => handleChange("name", e.target.value)}
-                          className="border border-gray-300 rounded px-2 py-1 w-full text-sm"
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <input 
-                          type="text" 
-                          value={editData.sku} 
-                          disabled 
-                          className="border border-gray-300 rounded px-2 py-1 w-full text-sm bg-gray-100" 
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <input
-                          type="number"
-                          value={editData.stock_quantity}
-                          onChange={(e) => handleChange("stock_quantity", parseInt(e.target.value))}
-                          className="border border-gray-300 rounded px-2 py-1 w-20 text-sm"
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <input
-                          type="number"
-                          value={editData.base_price}
-                          onChange={(e) => handleChange("base_price", parseFloat(e.target.value))}
-                          className="border border-gray-300 rounded px-2 py-1 w-24 text-sm"
-                          step="0.01"
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <input
-                          type="number"
-                          value={editData.gold_price || ''}
-                          onChange={(e) => handleChange("gold_price", e.target.value ? parseFloat(e.target.value) : null)}
-                          className="border border-gray-300 rounded px-2 py-1 w-24 text-sm"
-                          step="0.01"
-                          placeholder="Optional"
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <input
-                          type="number"
-                          value={editData.silver_price || ''}
-                          onChange={(e) => handleChange("silver_price", e.target.value ? parseFloat(e.target.value) : null)}
-                          className="border border-gray-300 rounded px-2 py-1 w-24 text-sm"
-                          step="0.01"
-                          placeholder="Optional"
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">
-                        Auto
-                      </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={editData.is_active}
-                          onChange={(e) => handleChange("is_active", e.target.checked)}
-                          className="w-4 h-4"
-                        />
-                      </td>
-                      <td className="px-4 py-3 flex gap-2">
-                        <button
-                          onClick={handleSave}
-                          disabled={saving}
-                          className="btn-primary py-1 px-2 inline-flex items-center gap-1 text-xs"
-                        >
-                          <Save size={14} />
-                          {saving ? 'Saving...' : 'Save'}
-                        </button>
-                        <button
-                          onClick={() => setEditingId(null)}
-                          disabled={saving}
-                          className="btn-secondary py-1 px-2 inline-flex items-center gap-1 text-xs"
-                        >
-                          <X size={14} />
-                          Cancel
-                        </button>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td className="px-4 py-3 text-sm font-medium">{product.name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{product.sku}</td>
-                      <td className="px-4 py-3 text-sm font-bold">{product.stock_quantity}</td>
-                      <td className="px-4 py-3 text-sm font-bold">${parseFloat(product.base_price).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {product.gold_price ? `$${parseFloat(product.gold_price).toFixed(2)}` : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {product.silver_price ? `$${parseFloat(product.silver_price).toFixed(2)}` : '-'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`status-badge ${getStatusColor(product.stock_status)}`}>
-                          {getStatusLabel(product.stock_status)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`status-badge ${product.is_active ? 'status-green' : 'status-red'}`}>
-                          {product.is_active ? 'Yes' : 'No'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => handleEdit(product)}
-                          className="btn-ghost py-1 px-2 inline-flex items-center gap-1 text-xs"
-                        >
-                          <Edit2 size={14} />
-                          Edit
-                        </button>
-                      </td>
-                    </>
-                  )}
+                <tr key={product.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedProducts.includes(product.id)}
+                      onChange={() => toggleProductSelection(product.id)}
+                      className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
+                    />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0 h-10 w-10 bg-gray-100 rounded-sm flex items-center justify-center">
+                        {product.image_url ? (
+                          <img src={product.image_url} alt="" className="h-10 w-10 object-cover rounded-sm" />
+                        ) : (
+                          <span className="text-gray-400 text-xs">No Img</span>
+                        )}
+                      </div>
+                      <div className="ml-4">
+                        <div className="text-sm font-medium text-gray-900">{product.name}</div>
+                        {product.categories && (
+                          <div className="text-xs text-gray-500">{product.categories.name}</div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">
+                    {product.sku}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">{product.stock_quantity}</div>
+                    <div className="text-xs text-gray-500">Threshold: {product.low_stock_threshold}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <div className="font-medium">${parseFloat(product.base_price).toFixed(2)}</div>
+                    <div className="text-xs text-gray-500">
+                      G: {product.gold_price ? `$${parseFloat(product.gold_price).toFixed(2)}` : '-'} / 
+                      S: {product.silver_price ? `$${parseFloat(product.silver_price).toFixed(2)}` : '-'}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(product.stock_status)}`}>
+                      {product.stock_status?.replace(/_/g, " ")}
+                    </span>
+                    {!product.is_active && (
+                      <span className="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">
+                        Inactive
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button 
+                      onClick={() => handleOpenEdit(product)}
+                      className="text-primary hover:text-primary/80 mr-4"
+                    >
+                      <Edit2 size={18} />
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setSelectedProduct(product)
+                        setIsDeleteModalOpen(true)
+                      }}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </td>
                 </tr>
               ))
-            ) : (
-              <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
-                  No products found for the selected filter
-                </td>
-              </tr>
             )}
           </tbody>
         </table>
+        
+        {/* Pagination */}
+        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+          <div className="flex-1 flex justify-between sm:hidden">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="btn-secondary text-sm"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="btn-secondary text-sm"
+            >
+              Next
+            </button>
+          </div>
+          <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm text-gray-700">
+                Page <span className="font-medium">{page}</span> of <span className="font-medium">{totalPages}</span>
+              </p>
+            </div>
+            <div>
+              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </nav>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* Edit/Create Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-6 border-b border-gray-100">
+              <h2 className="text-xl font-bold">{selectedProduct ? 'Edit Product' : 'Add New Product'}</h2>
+              <button onClick={() => setIsModalOpen(false)}><X size={24} className="text-gray-400 hover:text-gray-600" /></button>
+            </div>
+            
+            <form onSubmit={handleSave} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+                  <input
+                    type="text"
+                    value={formData.sku}
+                    onChange={(e) => setFormData({...formData, sku: e.target.value})}
+                    className="input-field w-full"
+                    placeholder="Auto-generated if empty"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    className="input-field w-full"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+                  <select
+                    required
+                    value={formData.category_id}
+                    onChange={(e) => setFormData({...formData, category_id: e.target.value})}
+                    className="input-field w-full"
+                  >
+                    <option value="">Select Category</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Unit *</label>
+                    <select
+                      required
+                      value={formData.unit}
+                      onChange={(e) => setFormData({...formData, unit: e.target.value})}
+                      className="input-field w-full"
+                    >
+                      <optgroup label="Count/Quantity">
+                        <option value="Piece">Piece</option>
+                        <option value="Pair">Pair</option>
+                        <option value="Dozen">Dozen</option>
+                        <option value="Set">Set</option>
+                        <option value="Pack">Pack</option>
+                        <option value="Bundle">Bundle</option>
+                      </optgroup>
+                      <optgroup label="Weight">
+                        <option value="g">Gram (g)</option>
+                        <option value="kg">Kilogram (kg)</option>
+                        <option value="lb">Pound (lb)</option>
+                        <option value="oz">Ounce (oz)</option>
+                        <option value="ton">Ton</option>
+                      </optgroup>
+                      <optgroup label="Volume">
+                        <option value="ml">Milliliter (ml)</option>
+                        <option value="L">Liter (L)</option>
+                        <option value="gal">Gallon (gal)</option>
+                        <option value="fl oz">Fluid Ounce (fl oz)</option>
+                      </optgroup>
+                      <optgroup label="Length">
+                        <option value="cm">Centimeter (cm)</option>
+                        <option value="m">Meter (m)</option>
+                        <option value="in">Inch (in)</option>
+                        <option value="ft">Foot (ft)</option>
+                        <option value="yd">Yard (yd)</option>
+                      </optgroup>
+                      <optgroup label="Area">
+                        <option value="sq m">Square Meter (sq m)</option>
+                        <option value="sq ft">Square Foot (sq ft)</option>
+                      </optgroup>
+                      <optgroup label="Packaging">
+                        <option value="Box">Box</option>
+                        <option value="Case">Case</option>
+                        <option value="Carton">Carton</option>
+                        <option value="Bag">Bag</option>
+                        <option value="Bottle">Bottle</option>
+                        <option value="Can">Can</option>
+                        <option value="Jar">Jar</option>
+                        <option value="Container">Container</option>
+                        <option value="Pallet">Pallet</option>
+                        <option value="Roll">Roll</option>
+                        <option value="Tube">Tube</option>
+                      </optgroup>
+                    </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  rows={3}
+                  value={formData.description}
+                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  className="input-field w-full"
+                ></textarea>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Base Price ($) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={formData.base_price || ''}
+                    onChange={(e) => setFormData({...formData, base_price: e.target.value === '' ? 0 : parseFloat(e.target.value)})}
+                    className="input-field w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Gold Price ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.gold_price || ''}
+                    onChange={(e) => setFormData({...formData, gold_price: e.target.value === '' ? 0 : parseFloat(e.target.value)})}
+                    className="input-field w-full"
+                    placeholder="Optional"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Silver Price ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.silver_price || ''}
+                    onChange={(e) => setFormData({...formData, silver_price: e.target.value === '' ? 0 : parseFloat(e.target.value)})}
+                    className="input-field w-full"
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Stock Quantity</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.stock_quantity || ''}
+                    onChange={(e) => setFormData({...formData, stock_quantity: e.target.value === '' ? 0 : parseInt(e.target.value)})}
+                    className="input-field w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Low Stock Threshold</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.low_stock_threshold || ''}
+                    onChange={(e) => setFormData({...formData, low_stock_threshold: e.target.value === '' ? 0 : parseInt(e.target.value)})}
+                    className="input-field w-full"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+                <input
+                  type="text"
+                  value={formData.image_url}
+                  onChange={(e) => setFormData({...formData, image_url: e.target.value})}
+                  className="input-field w-full"
+                  placeholder="https://example.com/image.jpg"
+                />
+              </div>
+
+              <div className="flex gap-6">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_active}
+                    onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
+                    className="w-4 h-4 text-primary"
+                  />
+                  <span className="text-sm text-gray-700">Active Product</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_featured}
+                    onChange={(e) => setFormData({...formData, is_featured: e.target.checked})}
+                    className="w-4 h-4 text-primary"
+                  />
+                  <span className="text-sm text-gray-700">Featured Product</span>
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="btn-secondary"
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={saving}
+                >
+                  {saving ? 'Saving...' : 'Save Product'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Product</h3>
+            <p className="text-gray-500 mb-6">
+              Are you sure you want to delete <span className="font-semibold text-gray-800">{selectedProduct?.name}</span>? 
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="btn-secondary"
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                className="btn bg-red-600 text-white hover:bg-red-700"
+                disabled={saving}
+              >
+                {saving ? 'Deleting...' : 'Delete Product'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {isBulkDeleteModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Multiple Products</h3>
+            <p className="text-gray-500 mb-6">
+              Are you sure you want to delete <span className="font-semibold text-gray-800">{selectedProducts.length} product(s)</span>? 
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setIsBulkDeleteModalOpen(false)}
+                className="btn-secondary"
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="btn bg-red-600 text-white hover:bg-red-700"
+                disabled={saving}
+              >
+                {saving ? 'Deleting...' : `Delete ${selectedProducts.length} Product(s)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

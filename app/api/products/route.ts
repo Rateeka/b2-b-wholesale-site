@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     
     // Validate required fields
-    const requiredFields = ['sku', 'name', 'category_id', 'base_price']
+    const requiredFields = ['name', 'category_id', 'base_price']
     const missingFields = requiredFields.filter(field => !body[field])
     
     if (missingFields.length > 0) {
@@ -144,6 +144,34 @@ export async function POST(request: NextRequest) {
         field: missingFields[0],
         message: `${missingFields[0]} is required`
       }])
+    }
+
+    // Generate SKU if not provided
+    if (!body.sku) {
+      const prefix = '819011'
+      let isUnique = false
+      let attempts = 0
+      
+      while (!isUnique && attempts < 5) {
+        const random = Math.floor(Math.random() * 1000000).toString().padStart(6, '0')
+        const generatedSku = prefix + random
+        
+        const { data: existing } = await supabase
+          .from('products')
+          .select('id')
+          .eq('sku', generatedSku)
+          .single()
+          
+        if (!existing) {
+          body.sku = generatedSku
+          isUnique = true
+        }
+        attempts++
+      }
+      
+      if (!isUnique) {
+        return apiError('Failed to generate unique SKU', 'SKU_GENERATION_ERROR', 500)
+      }
     }
     
     // Check if SKU already exists
@@ -228,10 +256,12 @@ export async function POST(request: NextRequest) {
         silver_price: body.silver_price || null,
         stock_quantity: stockQuantity,
         low_stock_threshold: lowStockThreshold,
+        low_stock_threshold: lowStockThreshold,
         stock_status: stockStatus,
         image_url: body.image_url || null,
-        is_featured: body.is_featured || false,
-        is_active: body.is_active !== undefined ? body.is_active : true
+        featured: body.is_featured || false,
+        is_active: body.is_active !== undefined ? body.is_active : true,
+        unit: body.unit || 'Piece',      
       })
       .select()
       .single()
@@ -249,5 +279,59 @@ export async function POST(request: NextRequest) {
                      error.message.includes('Forbidden') ? 403 : 401)
     }
     return apiError(error.message || 'Failed to create product', 'CREATE_ERROR', 500)
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    await requireAdmin()
+    const supabase = await createServerSupabaseClient()
+    const body = await request.json()
+    
+    if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
+      return apiBadRequest('Product IDs array is required')
+    }
+    
+    // Check if any products are referenced in orders
+    const { data: orderItems, error: orderCheckError } = await supabase
+      .from('order_items')
+      .select('product_id')
+      .in('product_id', body.ids)
+    
+    if (orderCheckError) {
+      throw orderCheckError
+    }
+    
+    if (orderItems && orderItems.length > 0) {
+      const referencedIds = [...new Set(orderItems.map(item => item.product_id))]
+      return apiError(
+        `Cannot delete products that have been ordered. ${referencedIds.length} product(s) are referenced in existing orders.`,
+        'PRODUCTS_REFERENCED',
+        409
+      )
+    }
+    
+    // Perform bulk delete
+    const { error: deleteError } = await supabase
+      .from('products')
+      .delete()
+      .in('id', body.ids)
+    
+    if (deleteError) {
+      throw deleteError
+    }
+    
+    return apiSuccess({ 
+      deleted: body.ids.length,
+      message: `Successfully deleted ${body.ids.length} product(s)` 
+    })
+    
+  } catch (error: any) {
+    console.error('[PRODUCTS API] Bulk delete error:', error)
+    if (error.message === 'Unauthorized' || error.message.includes('Forbidden')) {
+      return apiError(error.message, error.message.includes('Forbidden') ? 'FORBIDDEN' : 'UNAUTHORIZED', 
+                     error.message.includes('Forbidden') ? 403 : 401)
+    }
+    return apiError(error.message || 'Failed to delete products', 'DELETE_ERROR', 500)
   }
 }

@@ -335,3 +335,36 @@ export async function updateProduct(id: string, data: {
     body: JSON.stringify(data),
   })
 }
+
+export async function createProduct(data: {
+  sku: string
+  name: string
+  category_id: string
+  description?: string
+  base_price: number
+  gold_price?: number
+  silver_price?: number
+  stock_quantity?: number
+  low_stock_threshold?: number
+  image_url?: string
+  is_active?: boolean
+  is_featured?: boolean
+}) {
+  return apiClient('/api/products', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteProduct(id: string) {
+  return apiClient(`/api/products/${id}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function bulkDeleteProducts(ids: string[]) {
+  return apiClient('/api/products', {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+  })
+}

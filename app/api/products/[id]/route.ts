@@ -157,12 +157,16 @@ export async function PUT(
     }
     
     // Update basic fields
-    const basicFields = ['name', 'description', 'image_url', 'is_featured', 'is_active', 'low_stock_threshold']
+    const basicFields = ['name', 'description', 'image_url', 'is_active', 'low_stock_threshold', 'unit']
     basicFields.forEach(field => {
       if (body[field] !== undefined) {
         updateData[field] = body[field]
       }
     })
+
+    if (body.is_featured !== undefined) {
+      updateData.featured = body.is_featured
+    }
     
     // Handle stock quantity update
     if (body.stock_quantity !== undefined) {
@@ -231,5 +235,58 @@ export async function PUT(
                      error.message.includes('Forbidden') ? 403 : 401)
     }
     return apiError(error.message || 'Failed to update product', 'UPDATE_ERROR', 500)
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    await requireAdmin()
+    const supabase = await createServerSupabaseClient()
+    
+    // Check if product exists
+    const { data: existingProduct, error: fetchError } = await supabase
+      .from('products')
+      .select('id')
+      .eq('id', id)
+      .single()
+    
+    if (fetchError || !existingProduct) {
+      return apiNotFound('Product not found')
+    }
+    
+    // Check for dependencies (optional, but good practice)
+    // For example, check if product is in any active orders
+    const { count: orderCount } = await supabase
+      .from('order_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('product_id', id)
+      
+    if (orderCount && orderCount > 0) {
+      return apiBadRequest('Cannot delete product because it has associated orders. Archive it instead.')
+    }
+    
+    // Delete product
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id)
+    
+    if (error) {
+      throw error
+    }
+    
+    return apiSuccess({ success: true })
+    
+  } catch (error: any) {
+    console.error('[PRODUCTS API] Error deleting product:', error)
+    if (error.message === 'Unauthorized' || error.message.includes('Forbidden')) {
+      return apiError(error.message, error.message.includes('Forbidden') ? 'FORBIDDEN' : 'UNAUTHORIZED', 
+                     error.message.includes('Forbidden') ? 403 : 401)
+    }
+    return apiError(error.message || 'Failed to delete product', 'DELETE_ERROR', 500)
   }
 }
