@@ -115,7 +115,7 @@ export async function fetchProducts(params?: {
   
   return {
     products: data.data,
-    pagination: data.meta?.pagination
+    pagination: data.meta
   }
 }
 
@@ -150,6 +150,7 @@ export async function fetchOrders(params?: {
   const data = await response.json()
   
   if (!response.ok) {
+    console.error('[API Client] Orders fetch failed:', response.status, data)
     throw new ApiError(
       data.error?.message || 'Failed to fetch orders',
       data.error?.code || 'FETCH_ERROR',
@@ -157,9 +158,10 @@ export async function fetchOrders(params?: {
     )
   }
   
+  console.log('[API Client] Orders response:', data)
   return {
-    orders: data.data.orders,
-    pagination: data.data.pagination
+    orders: data.data,
+    pagination: data.meta
   }
 }
 
@@ -237,4 +239,99 @@ export async function fetchInvoices(params?: {
 
 export async function fetchInvoice(id: string) {
   return apiClient(`/api/invoices/${id}`)
+}
+
+// Admin Dashboard API
+export async function fetchAdminDashboardData() {
+  return apiClient<{
+    stats: {
+      stores: {
+        total: number
+        active: number
+        pending: number
+        tiers: {
+          gold: number
+          silver: number
+          standard: number
+        }
+      }
+      orders: {
+        total: number
+        pending: number
+        processing: number
+      }
+      revenue: {
+        total: number
+        monthly: number
+      }
+      products: {
+        total: number
+        active: number
+        out_of_stock: number
+        low_stock: number
+      }
+      invoices: {
+        overdue_count: number
+        overdue_amount: number
+      }
+    }
+    recent_orders: any[]
+    low_stock_products: any[]
+    pending_stores: any[]
+    overdue_invoices: any[]
+  }>('/api/dashboard/admin')
+}
+
+// Admin Stores API
+export async function fetchStores(params?: {
+  page?: number
+  limit?: number
+  status?: string
+  tier?: string
+  store_type?: string
+  search?: string
+}) {
+  const searchParams = new URLSearchParams()
+  if (params?.page) searchParams.set('page', params.page.toString())
+  if (params?.limit) searchParams.set('limit', params.limit.toString())
+  if (params?.status) searchParams.set('status', params.status)
+  if (params?.tier) searchParams.set('tier', params.tier)
+  if (params?.store_type) searchParams.set('store_type', params.store_type)
+  if (params?.search) searchParams.set('search', params.search)
+
+  const url = `/api/stores${searchParams.toString() ? `?${searchParams}` : ''}`
+  
+  const response = await fetch(url, { credentials: 'include' })
+  const data = await response.json()
+  
+  if (!response.ok) {
+    throw new ApiError(
+      data.error?.message || 'Failed to fetch stores',
+      data.error?.code || 'FETCH_ERROR',
+      response.status
+    )
+  }
+  
+  return {
+    stores: data.data.stores,
+    pagination: data.data.pagination
+  }
+}
+
+// Admin Products API (for inventory management)
+export async function updateProduct(id: string, data: {
+  name?: string
+  sku?: string
+  base_price?: number
+  gold_price?: number | null
+  silver_price?: number | null
+  stock_quantity?: number
+  low_stock_threshold?: number
+  is_active?: boolean
+  stock_change_notes?: string
+}) {
+  return apiClient(`/api/products/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
 }

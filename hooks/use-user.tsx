@@ -1,114 +1,110 @@
-"use client"
+'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, ReactNode } from 'react'
+import { User } from '@supabase/supabase-js'
+import { useQuery, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createBrowserClient } from '@supabase/ssr'
-import type { User } from '@supabase/supabase-js'
 
-type Store = {
-  store_id: string
+interface Store {
+  id: string
   name: string
-  tier: 'gold' | 'silver' | 'bronze'
-  status: string
+  tier: 'gold' | 'silver' | 'standard'
+  status: 'active' | 'pending' | 'inactive' | 'suspended'
   credit_limit: number
   credit_used: number
   credit_available: number
-  contact_email: string
-  contact_phone: string | null
-  address: string | null
-  city: string | null
-  province: string | null
-  postal_code: string | null
+  contact_email?: string
+  contact_phone?: string
+  address?: string
+  city?: string
+  province?: string
+  postal_code?: string
 }
 
-type UserContextType = {
+interface UserContextType {
   user: User | null
   store: Store | null
   isLoading: boolean
-  error: string | null
-  refreshStore: () => Promise<void>
+  refetchUser: () => void
+  refetchStore: () => void
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined)
 
-export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [store, setStore] = useState<Store | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+})
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
-  const fetchStore = async (userId: string) => {
-    try {
+function UserProviderInner({ children }: { children: ReactNode }) {
+  // Fetch user
+  const { data: user = null, isLoading: userLoading, refetch: refetchUser } = useQuery({
+    queryKey: ['user'],
+    queryFn: async () => {
+      const { data: { user }, error } = await supabase.auth.getUser()
+      if (error) throw error
+      return user
+    },
+  })
+
+  // Fetch store only if user exists
+  const { data: store = null, isLoading: storeLoading, refetch: refetchStore } = useQuery({
+    queryKey: ['store', user?.id],
+    queryFn: async () => {
+      if (!user) return null
+      
       const { data, error } = await supabase
         .from('stores')
-        .select('store_id, name, tier, status, credit_limit, credit_used, credit_available, contact_email, contact_phone, address, city, province, postal_code')
-        .eq('user_id', userId)
-        .single()
+        .select('id, name, tier, status, credit_limit, credit_used, email, phone, address_line1, city, province, postal_code')
+        .eq('user_id', user.id)
+        .maybeSingle()
 
-      if (error) {
-        console.error('Supabase error fetching store:', error)
-        throw error
-      }
-      console.log('[use-user] Store data loaded:', data)
-      setStore(data)
-      setError(null)
-    } catch (err) {
-      console.error('[use-user] Error fetching store:', err)
-      setError('Failed to load store information')
-      setStore(null)
-    }
-  }
+      if (error) throw error
+      if (!data) return null
 
-  const refreshStore = async () => {
-    if (user) {
-      await fetchStore(user.id)
-    }
-  }
+      return {
+        id: data.id,
+        name: data.name,
+        tier: data.tier,
+        status: data.status,
+        credit_limit: data.credit_limit,
+        credit_used: data.credit_used,
+        credit_available: data.credit_limit - data.credit_used,
+        contact_email: data.email,
+        contact_phone: data.phone,
+        address: data.address_line1,
+        city: data.city,
+        province: data.province,
+        postal_code: data.postal_code,
+      } as Store
+    },
+    enabled: !!user,
+  })
 
-  useEffect(() => {
-    const initUser = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        setUser(user)
-        
-        if (user) {
-          await fetchStore(user.id)
-        }
-      } catch (err) {
-        console.error('Error initializing user:', err)
-        setError('Failed to load user information')
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    initUser()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setUser(session?.user ?? null)
-        
-        if (session?.user) {
-          await fetchStore(session.user.id)
-        } else {
-          setStore(null)
-        }
-      }
-    )
-
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [])
+  const isLoading = userLoading || (user ? storeLoading : false)
 
   return (
-    <UserContext.Provider value={{ user, store, isLoading, error, refreshStore }}>
+    <UserContext.Provider value={{ user, store, isLoading, refetchUser, refetchStore }}>
       {children}
     </UserContext.Provider>
+  )
+}
+
+export function UserProvider({ children }: { children: ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <UserProviderInner>{children}</UserProviderInner>
+    </QueryClientProvider>
   )
 }
 

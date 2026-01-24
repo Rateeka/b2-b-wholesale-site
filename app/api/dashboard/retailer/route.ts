@@ -59,15 +59,34 @@ export async function GET(request: NextRequest) {
     // Get unpaid invoices
     const { data: unpaidInvoices } = await supabase
       .from('invoices')
-      .select('id, invoice_number, total_amount, due_date')
+      .select('id, invoice_number, total_amount, amount_paid, due_date')
       .eq('store_id', store.id)
       .in('status', ['sent', 'overdue'])
       .order('due_date', { ascending: true })
       .limit(5)
     
-    const unpaidInvoicesAmount = unpaidInvoices?.reduce((sum, inv) => 
-      sum + parseFloat(inv.total_amount.toString()), 0
-    ) || 0
+    // Calculate amount_due and days_overdue for each invoice
+    const unpaidInvoicesWithDetails = unpaidInvoices?.map(inv => {
+      const total = parseFloat(inv.total_amount.toString())
+      const paid = parseFloat((inv.amount_paid || 0).toString())
+      const amount_due = total - paid
+      const dueDate = new Date(inv.due_date)
+      const today = new Date()
+      const days_overdue = Math.max(0, Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)))
+      
+      return {
+        id: inv.id,
+        invoice_number: inv.invoice_number,
+        total_amount: total,
+        amount_due,
+        days_overdue,
+        due_date: inv.due_date
+      }
+    }) || []
+    
+    const unpaidInvoicesAmount = unpaidInvoicesWithDetails.reduce((sum, inv) => 
+      sum + inv.amount_due, 0
+    )
     
     return apiSuccess({
       store: {
@@ -84,11 +103,11 @@ export async function GET(request: NextRequest) {
         active_orders: activeOrders,
         total_spent: totalSpent,
         low_stock_alerts: lowStockAlerts,
-        unpaid_invoices: unpaidInvoices?.length || 0,
+        unpaid_invoices: unpaidInvoicesWithDetails.length,
         unpaid_amount: unpaidInvoicesAmount
       },
       recent_orders: recentOrders,
-      unpaid_invoices: unpaidInvoices,
+      unpaid_invoices: unpaidInvoicesWithDetails,
       low_stock_products: lowStockProducts
     })
     

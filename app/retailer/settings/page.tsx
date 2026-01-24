@@ -6,7 +6,7 @@ import { useUser } from "@/hooks/use-user"
 import { updateStore, ApiError } from "@/lib/api-client"
 
 export default function SettingsPage() {
-  const { store, refreshStore } = useUser()
+  const { store, refetchStore } = useUser()
   const [saved, setSaved] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -41,11 +41,11 @@ export default function SettingsPage() {
   const handleSave = async () => {
     if (!store) return
 
-    try {
+      try {
       setIsLoading(true)
       setError(null)
-      await updateStore(store.store_id, formData)
-      await refreshStore()
+      await updateStore(store.id, formData)
+      await refetchStore()
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err) {

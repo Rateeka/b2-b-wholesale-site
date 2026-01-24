@@ -5,10 +5,13 @@ import { parsePagination, calculatePagination, getPaginationRange } from '@/lib/
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('[ORDERS API] GET request started')
     const user = await requireAuth()
+    console.log('[ORDERS API] User authenticated:', user.id)
     const supabase = await createServerSupabaseClient()
     const searchParams = request.nextUrl.searchParams
     const role = getUserRole(user)
+    console.log('[ORDERS API] User role:', role)
     
     // Parse pagination
     const { page, perPage } = parsePagination(searchParams)
@@ -19,6 +22,8 @@ export async function GET(request: NextRequest) {
     const storeId = searchParams.get('store_id')
     const dateFrom = searchParams.get('date_from')
     const dateTo = searchParams.get('date_to')
+    
+    console.log('[ORDERS API] Filters:', { status, storeId, dateFrom, dateTo })
     
     // Build query
     let query = supabase
@@ -33,6 +38,7 @@ export async function GET(request: NextRequest) {
         tax_amount,
         discount_amount,
         total_amount,
+        total_items,
         order_date,
         confirmed_at,
         shipped_at,
@@ -52,17 +58,21 @@ export async function GET(request: NextRequest) {
     
     // RLS: Retailers can only see their own orders
     if (role === 'retailer') {
+      console.log('[ORDERS API] Fetching store for retailer:', user.id)
       const { data: store } = await supabase
         .from('stores')
         .select('id')
         .eq('user_id', user.id)
         .single()
       
+      console.log('[ORDERS API] Store found:', store)
+      
       if (!store) {
         return apiError('Store not found for user', 'STORE_NOT_FOUND', 404)
       }
       
       query = query.eq('store_id', store.id)
+      console.log('[ORDERS API] Query filtered by store_id:', store.id)
     } else if (storeId && role === 'admin') {
       // Admin can filter by store_id
       query = query.eq('store_id', storeId)
@@ -86,6 +96,7 @@ export async function GET(request: NextRequest) {
       .order('order_date', { ascending: false })
       .range(from, to)
     
+    console.log('[ORDERS API] Executing query...')
     const { data, error, count } = await query
     
     if (error) {
@@ -93,6 +104,7 @@ export async function GET(request: NextRequest) {
       return apiError('Failed to fetch orders', 'DATABASE_ERROR', 500, error)
     }
     
+    console.log('[ORDERS API] Query successful, count:', count, 'data length:', data?.length)
     const paginationMeta = calculatePagination(count || 0, page, perPage)
     
     return apiSuccess(data, paginationMeta)
@@ -205,6 +217,7 @@ export async function POST(request: NextRequest) {
     const shippingCost = body.shipping_cost || 0
     const discountAmount = body.discount_amount || 0
     const totalAmount = subtotal + taxAmount + shippingCost - discountAmount
+    const totalItems = validatedItems.reduce((sum, item) => sum + item.quantity, 0)
     
     // Check credit limit
     if (store.credit_used + totalAmount > store.credit_limit) {
@@ -236,6 +249,7 @@ export async function POST(request: NextRequest) {
         tax_amount: taxAmount,
         discount_amount: discountAmount,
         total_amount: totalAmount,
+        total_items: totalItems,
         shipping_address_line1: shipping_address?.address_line1,
         shipping_address_line2: shipping_address?.address_line2,
         shipping_city: shipping_address?.city,

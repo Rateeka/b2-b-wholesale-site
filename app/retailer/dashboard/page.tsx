@@ -285,14 +285,14 @@ export default function RetailerDashboard() {
           </div>
           <div className="space-y-3">
             {dashboardData.low_stock_products.map((product) => (
-              <div key={product.product_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div key={product.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex-1">
-                  <p className="font-medium text-secondary">{product.product_name}</p>
+                  <p className="font-medium text-secondary">{product.name}</p>
                   <p className="text-sm text-gray-600">SKU: {product.sku}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-yellow-600">{product.current_stock} units</p>
-                  <p className="text-xs text-gray-500">Min: {product.reorder_level}</p>
+                  <p className="font-bold text-yellow-600">{product.stock_quantity} units</p>
+                  <p className="text-xs text-gray-500">Min: {product.low_stock_threshold}</p>
                 </div>
               </div>
             ))}

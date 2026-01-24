@@ -6,7 +6,7 @@ import { useUser } from "@/hooks/use-user"
 import { Loader2, AlertCircle, Package } from "lucide-react"
 
 export default function OrdersPage() {
-  const { store } = useUser()
+  const { store, isLoading: userLoading } = useUser()
   const [orders, setOrders] = useState<any[]>([])
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
   const [orderDetails, setOrderDetails] = useState<Record<string, any>>({})
@@ -17,12 +17,19 @@ export default function OrdersPage() {
 
   useEffect(() => {
     async function loadOrders() {
-      if (!store) return
+      // Wait for user context and require store
+      if (userLoading || !store) {
+        if (!userLoading && !store) {
+          setIsLoading(false)
+          setError("No store found for your account")
+        }
+        return
+      }
 
       try {
         setIsLoading(true)
-        const data = await fetchOrders(store.store_id, statusFilter || undefined)
-        setOrders(data)
+        const response = await fetchOrders({ status: statusFilter || undefined })
+        setOrders(Array.isArray(response?.orders) ? response.orders : [])
         setError(null)
       } catch (err) {
         console.error("Failed to load orders:", err)
@@ -33,7 +40,7 @@ export default function OrdersPage() {
     }
 
     loadOrders()
-  }, [store, statusFilter])
+  }, [userLoading, store, statusFilter])
 
   const handleExpandOrder = async (orderId: string) => {
     if (expandedOrder === orderId) {
@@ -101,7 +108,7 @@ export default function OrdersPage() {
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       delivered: "Delivered",
-      shipped: "Shipped",
+      out_for_delivery: "Out for Delivery",
       confirmed: "Confirmed",
       processing: "Processing",
       pending: "Pending",
@@ -118,7 +125,7 @@ export default function OrdersPage() {
     })
   }
 
-  const statuses = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"]
+  const statuses = ["pending", "confirmed", "processing", "out_for_delivery", "delivered", "cancelled"]
 
   return (
     <div className="space-y-8">
@@ -163,13 +170,13 @@ export default function OrdersPage() {
       ) : (
         <div className="space-y-4">
           {orders.map((order) => {
-            const details = orderDetails[order.order_id]
-            const isExpanded = expandedOrder === order.order_id
+            const details = orderDetails[order.id]
+            const isExpanded = expandedOrder === order.id
 
             return (
-              <div key={order.order_id} className="card">
+              <div key={order.id} className="card">
                 <div
-                  onClick={() => handleExpandOrder(order.order_id)}
+                  onClick={() => handleExpandOrder(order.id)}
                   className="cursor-pointer flex items-center justify-between"
                 >
                   <div className="flex-1">
@@ -204,7 +211,7 @@ export default function OrdersPage() {
 
                 {isExpanded && (
                   <div className="mt-6 pt-6 border-t border-border">
-                    {isLoadingDetails === order.order_id ? (
+                    {isLoadingDetails === order.id ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="animate-spin text-primary" size={32} />
                       </div>
@@ -213,10 +220,10 @@ export default function OrdersPage() {
                         <h4 className="font-bold text-secondary mb-4">Items in Order</h4>
                         <div className="space-y-3">
                           {details.items.map((item: any) => (
-                            <div key={item.order_item_id} className="flex justify-between items-center text-sm">
+                            <div key={item.id} className="flex justify-between items-center text-sm">
                               <div>
                                 <span className="text-gray-700 font-medium">{item.product_name}</span>
-                                <p className="text-xs text-gray-500">SKU: {item.sku}</p>
+                                <p className="text-xs text-gray-500">SKU: {item.product_sku}</p>
                               </div>
                               <div className="text-right">
                                 <span className="font-medium">

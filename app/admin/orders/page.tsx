@@ -1,38 +1,108 @@
 "use client"
 
-import { useState } from "react"
-import { orders } from "@/lib/mock-data"
-import { Printer } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Printer, AlertCircle } from "lucide-react"
+import { fetchOrders, apiClient } from "@/lib/api-client"
 
 export default function OrdersPage() {
+  const [orders, setOrders] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState("all")
-  const [expandedOrder, setExpandedOrder] = useState(null)
+  const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
+  const [orderDetails, setOrderDetails] = useState<any>(null)
+  const [loadingDetails, setLoadingDetails] = useState(false)
 
-  const filtered = statusFilter === "all" ? orders : orders.filter((o) => o.status === statusFilter)
+  useEffect(() => {
+    loadOrders()
+  }, [statusFilter])
 
-  const statuses = ["all", "processing", "out_for_delivery", "delivered"]
+  const loadOrders = async () => {
+    try {
+      setLoading(true)
+      const params = statusFilter !== "all" ? { status: statusFilter } : {}
+      const data = await fetchOrders(params)
+      setOrders(data.orders)
+    } catch (err: any) {
+      setError(err.message || 'Failed to load orders')
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const getStatusColor = (status) => {
+  const loadOrderDetails = async (orderId: string) => {
+    try {
+      setLoadingDetails(true)
+      const details = await apiClient(`/api/orders/${orderId}`)
+      setOrderDetails(details)
+    } catch (err: any) {
+      console.error('Failed to load order details:', err)
+    } finally {
+      setLoadingDetails(false)
+    }
+  }
+
+  const handleExpandOrder = (orderId: string) => {
+    if (expandedOrder === orderId) {
+      setExpandedOrder(null)
+      setOrderDetails(null)
+    } else {
+      setExpandedOrder(orderId)
+      loadOrderDetails(orderId)
+    }
+  }
+
+  const statuses = ["all", "pending", "processing", "confirmed", "out_for_delivery", "delivered", "cancelled"]
+
+  const getStatusColor = (status: string) => {
     switch (status) {
       case "delivered":
         return "status-green"
       case "out_for_delivery":
+      case "confirmed":
         return "status-yellow"
       case "processing":
+      case "pending":
         return "status-yellow"
+      case "cancelled":
+        return "status-red"
       default:
         return "status-gray"
     }
   }
 
-  const getStatusLabel = (status) => {
-    const labels = {
+  const getStatusLabel = (status: string) => {
+    const labels: { [key: string]: string } = {
       delivered: "Delivered",
       out_for_delivery: "Out for Delivery",
+      confirmed: "Confirmed",
       processing: "Processing",
       pending: "Pending",
+      cancelled: "Cancelled",
     }
     return labels[status] || status
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <p className="mt-4 text-gray-600">Loading orders...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="card">
+        <div className="flex items-center gap-2 text-red-600">
+          <AlertCircle size={20} />
+          <p>Error: {error}</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -65,7 +135,7 @@ export default function OrdersPage() {
         <table className="w-full">
           <thead>
             <tr className="bg-secondary text-white">
-              <th className="px-4 py-3 text-left text-sm font-bold">Order ID</th>
+              <th className="px-4 py-3 text-left text-sm font-bold">Order #</th>
               <th className="px-4 py-3 text-left text-sm font-bold">Store</th>
               <th className="px-4 py-3 text-left text-sm font-bold">Date</th>
               <th className="px-4 py-3 text-left text-sm font-bold">Items</th>
@@ -75,27 +145,39 @@ export default function OrdersPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((order) => (
-              <tr key={order.id} className="border-b border-border hover:bg-gray-50">
-                <td className="px-4 py-3 text-sm font-medium text-primary">{order.id}</td>
-                <td className="px-4 py-3 text-sm">{order.storeName}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{order.date}</td>
-                <td className="px-4 py-3 text-sm">{order.items.length}</td>
-                <td className="px-4 py-3 text-sm font-bold">${order.total.toFixed(2)}</td>
-                <td className="px-4 py-3">
-                  <span className={`status-badge ${getStatusColor(order.status)}`}>{getStatusLabel(order.status)}</span>
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}
-                    className="btn-ghost text-xs flex items-center gap-1"
-                  >
-                    <Printer size={14} />
-                    {expandedOrder === order.id ? "Hide" : "Slip"}
-                  </button>
+            {orders.length > 0 ? (
+              orders.map((order) => (
+                <tr key={order.id} className="border-b border-border hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm font-medium text-primary">{order.order_number}</td>
+                  <td className="px-4 py-3 text-sm">{order.store_name || 'N/A'}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    {new Date(order.order_date).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 text-sm">{order.total_items}</td>
+                  <td className="px-4 py-3 text-sm font-bold">${parseFloat(order.total_amount).toFixed(2)}</td>
+                  <td className="px-4 py-3">
+                    <span className={`status-badge ${getStatusColor(order.status)}`}>
+                      {getStatusLabel(order.status)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => handleExpandOrder(order.id)}
+                      className="btn-ghost text-xs flex items-center gap-1"
+                    >
+                      <Printer size={14} />
+                      {expandedOrder === order.id ? "Hide" : "Details"}
+                    </button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                  No orders found for the selected filter
                 </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
@@ -103,50 +185,83 @@ export default function OrdersPage() {
       {/* Expanded Order Details */}
       {expandedOrder && (
         <div className="card bg-gray-50">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-bold text-secondary">Packing Slip - {expandedOrder}</h3>
-            <button onClick={() => window.print()} className="btn-primary inline-flex items-center gap-2">
-              <Printer size={16} />
-              Print
-            </button>
-          </div>
+          {loadingDetails ? (
+            <div className="text-center py-8">
+              <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+              <p className="mt-2 text-sm text-gray-600">Loading order details...</p>
+            </div>
+          ) : orderDetails ? (
+            <>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-secondary">Order Details - {orderDetails.order_number}</h3>
+                <button onClick={() => window.print()} className="btn-primary inline-flex items-center gap-2">
+                  <Printer size={16} />
+                  Print
+                </button>
+              </div>
 
-          {orders
-            .filter((o) => o.id === expandedOrder)
-            .map((order) => (
-              <div key={order.id} className="space-y-4">
+              <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-6 pb-4 border-b border-border">
                   <div>
                     <p className="text-xs font-bold text-secondary">STORE</p>
-                    <p className="font-bold">{order.storeName}</p>
+                    <p className="font-bold">{orderDetails.store_name || 'N/A'}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-secondary">ORDER ID</p>
-                    <p className="font-bold text-primary">{order.id}</p>
+                    <p className="text-xs font-bold text-secondary">ORDER #</p>
+                    <p className="font-bold text-primary">{orderDetails.order_number}</p>
                   </div>
                   <div>
                     <p className="text-xs font-bold text-secondary">DATE</p>
-                    <p>{order.date}</p>
+                    <p>{new Date(orderDetails.order_date).toLocaleDateString()}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-secondary">TOTAL</p>
-                    <p className="font-bold">${order.total.toFixed(2)}</p>
+                    <p className="text-xs font-bold text-secondary">STATUS</p>
+                    <span className={`status-badge ${getStatusColor(orderDetails.status)}`}>
+                      {getStatusLabel(orderDetails.status)}
+                    </span>
                   </div>
                 </div>
 
                 <div>
                   <p className="text-xs font-bold text-secondary mb-3">ITEMS</p>
                   <div className="space-y-2">
-                    {order.items.map((item, idx) => (
-                      <div key={idx} className="flex justify-between text-sm pb-2 border-b border-gray-300">
-                        <span>{item.productId}</span>
-                        <span>Qty: {item.quantity}</span>
-                      </div>
-                    ))}
+                    {orderDetails.items && orderDetails.items.length > 0 ? (
+                      orderDetails.items.map((item: any) => (
+                        <div key={item.id} className="flex justify-between items-center text-sm pb-2 border-b border-gray-300">
+                          <div>
+                            <p className="font-medium">{item.product_name}</p>
+                            <p className="text-xs text-gray-600">SKU: {item.product_sku}</p>
+                          </div>
+                          <div className="text-right">
+                            <p>Qty: {item.quantity}</p>
+                            <p className="text-xs text-gray-600">${parseFloat(item.unit_price).toFixed(2)} each</p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-gray-500">No items found</p>
+                    )}
                   </div>
                 </div>
+
+                <div className="pt-4 border-t border-border">
+                  <div className="flex justify-between font-bold text-lg">
+                    <span>TOTAL</span>
+                    <span>${parseFloat(orderDetails.total_amount).toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {orderDetails.notes && (
+                  <div className="pt-4 border-t border-border">
+                    <p className="text-xs font-bold text-secondary mb-2">NOTES</p>
+                    <p className="text-sm text-gray-700">{orderDetails.notes}</p>
+                  </div>
+                )}
               </div>
-            ))}
+            </>
+          ) : (
+            <p className="text-center text-gray-500 py-8">Failed to load order details</p>
+          )}
         </div>
       )}
     </div>

@@ -13,6 +13,8 @@ function RetailerLayoutContent({ children }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const { user, store, isLoading: loading } = useUser()
 
+  console.log('[RETAILER LAYOUT] Render - loading:', loading, 'user:', user?.id, 'store:', store?.id)
+
   const handleLogout = async () => {
     try {
       console.log('[RETAILER LAYOUT] Logging out...')

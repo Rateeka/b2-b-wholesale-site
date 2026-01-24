@@ -5,29 +5,56 @@ import { ShoppingCart, AlertCircle, Loader2 } from "lucide-react"
 import { fetchProducts, fetchCategories, ApiError } from "@/lib/api-client"
 import { useUser } from "@/hooks/use-user"
 
+interface CartItem {
+  id: string
+  name: string
+  sku: string
+  unit: string
+  effective_price: number
+  quantity: number
+}
+
 export default function CatalogPage() {
-  const { user, store } = useUser()
-  const [products, setProducts] = useState([])
-  const [categories, setCategories] = useState([])
+  const { user, store, isLoading: userLoading } = useUser()
+  const [products, setProducts] = useState<any[]>([])
+  const [categories, setCategories] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [quantities, setQuantities] = useState<Record<string, number>>({})
-  const [cart, setCart] = useState<any[]>([])
+  const [cart, setCart] = useState<CartItem[]>([])
   const [filter, setFilter] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
 
+  // Load cart from localStorage on mount
+  useEffect(() => {
+    const savedCart = localStorage.getItem('cart')
+    if (savedCart) {
+      try {
+        setCart(JSON.parse(savedCart))
+      } catch (e) {
+        console.error('Failed to load cart:', e)
+      }
+    }
+  }, [])
+
+  // Save cart to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('cart', JSON.stringify(cart))
+  }, [cart])
+
   useEffect(() => {
     async function loadData() {
-      if (!store) return
+      // Wait for user context to finish loading
+      if (userLoading) return
 
       try {
         setIsLoading(true)
-        const [productsData, categoriesData] = await Promise.all([
+        const [productsResponse, categoriesData] = await Promise.all([
           fetchProducts(),
           fetchCategories(),
         ])
-        setProducts(productsData)
-        setCategories(categoriesData)
+        setProducts(Array.isArray(productsResponse?.products) ? productsResponse.products : [])
+        setCategories(Array.isArray(categoriesData) ? categoriesData : [])
         setError(null)
       } catch (err) {
         console.error("Failed to load catalog:", err)
@@ -38,7 +65,7 @@ export default function CatalogPage() {
     }
 
     loadData()
-  }, [store])
+  }, [userLoading])
 
   if (isLoading) {
     return (
@@ -76,20 +103,32 @@ export default function CatalogPage() {
   }
 
   const handleAddToCart = (product: any) => {
-    const quantity = quantities[product.product_id] || 0
+    const quantity = quantities[product.id] || 0
     if (quantity === 0) return
 
-    const existingItem = cart.find((item) => item.product_id === product.product_id)
+    const existingItem = cart.find((item) => item.id === product.id)
     if (existingItem) {
       setCart(cart.map((item) => 
-        item.product_id === product.product_id 
+        item.id === product.id 
           ? { ...item, quantity: item.quantity + quantity } 
           : item
       ))
     } else {
-      setCart([...cart, { ...product, quantity, selectedPrice: product.effective_price }])
+      const cartItem: CartItem = {
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        unit: product.unit,
+        effective_price: product.effective_price,
+        quantity
+      }
+      setCart([...cart, cartItem])
     }
-    setQuantities({ ...quantities, [product.product_id]: 0 })
+    setQuantities({ ...quantities, [product.id]: 0 })
+  }
+
+  const getTotalItems = () => {
+    return cart.reduce((sum, item) => sum + item.quantity, 0)
   }
 
   const getStockStatus = (stock: number, reorderLevel: number) => {
@@ -116,7 +155,7 @@ export default function CatalogPage() {
         {cart.length > 0 && (
           <a href="/retailer/checkout" className="btn-primary inline-flex items-center gap-2">
             <ShoppingCart size={18} />
-            Checkout ({cart.length})
+            Checkout ({getTotalItems()})
           </a>
         )}
       </div>
@@ -147,10 +186,10 @@ export default function CatalogPage() {
             </button>
             {categories.map((cat) => (
               <button
-                key={cat.category_id}
-                onClick={() => setFilter(cat.category_id)}
+                key={cat.id}
+                onClick={() => setFilter(cat.id)}
                 className={`px-4 py-2 rounded-sm text-sm font-medium transition-all ${
-                  filter === cat.category_id ? "bg-primary text-white" : "bg-gray-100 text-secondary hover:bg-gray-200"
+                  filter === cat.id ? "bg-primary text-white" : "bg-gray-100 text-secondary hover:bg-gray-200"
                 }`}
               >
                 {cat.name}
@@ -167,7 +206,7 @@ export default function CatalogPage() {
           const isDisabled = product.stock_quantity === 0
 
           return (
-            <div key={product.product_id} className={`card flex flex-col ${isDisabled ? "opacity-60" : ""}`}>
+            <div key={product.id} className={`card flex flex-col ${isDisabled ? "opacity-60" : ""}`}>
               <div className="mb-4">
                 <div className="flex justify-between items-start mb-2">
                   <div>
@@ -197,24 +236,24 @@ export default function CatalogPage() {
                   <label className="block text-xs font-bold text-secondary mb-2">Quantity</label>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleQuantityChange(product.product_id, (quantities[product.product_id] || 0) - 1)}
+                      onClick={() => handleQuantityChange(product.id, (quantities[product.id] || 0) - 1)}
                       disabled={isDisabled}
-                      className="btn-ghost px-2 py-1 text-sm disabled:opacity-50"
+                      className="btn-ghost px-3 py-2 text-sm disabled:opacity-50"
                     >
                       −
                     </button>
                     <input
                       type="number"
-                      value={quantities[product.product_id] || 0}
-                      onChange={(e) => handleQuantityChange(product.product_id, Number.parseInt(e.target.value) || 0)}
+                      value={quantities[product.id] || 0}
+                      onChange={(e) => handleQuantityChange(product.id, Number.parseInt(e.target.value) || 0)}
                       disabled={isDisabled}
-                      className="input w-12 text-center text-sm disabled:opacity-50"
+                      className="w-16 px-3 py-2 border border-border text-center text-sm font-medium disabled:opacity-50"
                       min="0"
                     />
                     <button
-                      onClick={() => handleQuantityChange(product.product_id, (quantities[product.product_id] || 0) + 1)}
+                      onClick={() => handleQuantityChange(product.id, (quantities[product.id] || 0) + 1)}
                       disabled={isDisabled}
-                      className="btn-ghost px-2 py-1 text-sm disabled:opacity-50"
+                      className="btn-ghost px-3 py-2 text-sm disabled:opacity-50"
                     >
                       +
                     </button>
@@ -223,7 +262,7 @@ export default function CatalogPage() {
 
                 <button
                   onClick={() => handleAddToCart(product)}
-                  disabled={isDisabled || (quantities[product.product_id] || 0) === 0}
+                  disabled={isDisabled || (quantities[product.id] || 0) === 0}
                   className="btn-primary w-full disabled:opacity-50 mt-auto"
                 >
                   Add to Cart

@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import {
   BarChart,
   Bar,
@@ -15,34 +16,83 @@ import {
   Pie,
   Cell,
 } from "recharts"
-import { TrendingUp, Users, Package, DollarSign } from "lucide-react"
-import { orders } from "@/lib/mock-data"
+import { TrendingUp, Users, Package, DollarSign, AlertCircle } from "lucide-react"
+import { fetchAdminDashboardData } from "@/lib/api-client"
 
 export default function AdminDashboard() {
-  const salesData = [
-    { month: "Jan", revenue: 15000, orders: 24 },
-    { month: "Feb", revenue: 18500, orders: 28 },
-    { month: "Mar", revenue: 22000, orders: 35 },
-    { month: "Apr", revenue: 19500, orders: 31 },
-    { month: "May", revenue: 24000, orders: 40 },
-    { month: "Jun", revenue: 28500, orders: 45 },
-  ]
+  const [dashboardData, setDashboardData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const categoryData = [
-    { name: "Dairy", value: 35 },
-    { name: "Snacks", value: 25 },
-    { name: "Grains", value: 20 },
-    { name: "Breads", value: 12 },
-    { name: "Beverages", value: 8 },
-  ]
+  useEffect(() => {
+    const loadDashboard = async () => {
+      try {
+        setLoading(true)
+        const data = await fetchAdminDashboardData()
+        setDashboardData(data)
+      } catch (err: any) {
+        setError(err.message || 'Failed to load dashboard')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadDashboard()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="card">
+        <div className="flex items-center gap-2 text-red-600">
+          <AlertCircle size={20} />
+          <p>Error: {error}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!dashboardData) return null
+
+  const { stats, recent_orders, low_stock_products, pending_stores } = dashboardData
 
   const COLORS = ["#D35400", "#2C3E50", "#27AE60", "#F39C12", "#E74C3C"]
 
-  const stats = [
-    { label: "Total Revenue", value: "$165,500", change: "+12.5%", icon: DollarSign },
-    { label: "Orders This Month", value: "145", change: "+8.2%", icon: TrendingUp },
-    { label: "Active Stores", value: "3", change: "+1", icon: Users },
-    { label: "Products in Stock", value: "6", change: "-1", icon: Package },
+  const dashStats = [
+    { 
+      label: "Total Revenue", 
+      value: `$${stats.revenue.total.toFixed(2)}`, 
+      change: `$${stats.revenue.monthly.toFixed(2)} this month`, 
+      icon: DollarSign 
+    },
+    { 
+      label: "Total Orders", 
+      value: stats.orders.total.toString(), 
+      change: `${stats.orders.pending} pending`, 
+      icon: TrendingUp 
+    },
+    { 
+      label: "Active Stores", 
+      value: stats.stores.active.toString(), 
+      change: `${stats.stores.pending} pending approval`, 
+      icon: Users 
+    },
+    { 
+      label: "Products in Stock", 
+      value: stats.products.active.toString(), 
+      change: `${stats.products.out_of_stock} out of stock`, 
+      icon: Package 
+    },
   ]
 
   return (
@@ -54,7 +104,7 @@ export default function AdminDashboard() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, idx) => {
+        {dashStats.map((stat, idx) => {
           const Icon = stat.icon
           return (
             <div key={idx} className="card">
@@ -62,7 +112,7 @@ export default function AdminDashboard() {
                 <div>
                   <p className="text-sm text-gray-600 font-medium">{stat.label}</p>
                   <p className="text-2xl font-bold text-secondary mt-2">{stat.value}</p>
-                  <p className="text-xs text-green-600 mt-1">{stat.change}</p>
+                  <p className="text-xs text-gray-500 mt-1">{stat.change}</p>
                 </div>
                 <Icon className="text-primary opacity-20" size={40} />
               </div>
@@ -71,70 +121,55 @@ export default function AdminDashboard() {
         })}
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Revenue Chart */}
-        <div className="lg:col-span-2 card">
-          <h2 className="text-xl font-bold text-secondary mb-6">Revenue Trend (6 months)</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={salesData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E0E0E0" />
-              <XAxis dataKey="month" stroke="#2C3E50" />
-              <YAxis stroke="#2C3E50" />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="revenue" stroke="#D35400" strokeWidth={2} name="Revenue ($)" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Category Distribution */}
+      {/* Tier Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Store Tiers */}
         <div className="card">
-          <h2 className="text-xl font-bold text-secondary mb-6">Sales by Category</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={categoryData}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={(entry) => entry.name}
-                outerRadius={80}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {categoryData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-            </PieChart>
-          </ResponsiveContainer>
+          <h2 className="text-xl font-bold text-secondary mb-6">Stores by Tier</h2>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Gold Tier</span>
+              <span className="text-lg font-bold text-yellow-600">{stats.stores.tiers.gold}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Silver Tier</span>
+              <span className="text-lg font-bold text-gray-400">{stats.stores.tiers.silver}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Standard Tier</span>
+              <span className="text-lg font-bold text-gray-600">{stats.stores.tiers.standard}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Inventory Alerts */}
+        <div className="card">
+          <h2 className="text-xl font-bold text-secondary mb-6">Inventory Alerts</h2>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Low Stock Items</span>
+              <span className="text-lg font-bold text-orange-600">{stats.products.low_stock}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Out of Stock</span>
+              <span className="text-lg font-bold text-red-600">{stats.products.out_of_stock}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Overdue Invoices</span>
+              <span className="text-lg font-bold text-red-600">{stats.invoices.overdue_count}</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Orders Chart */}
-      <div className="card">
-        <h2 className="text-xl font-bold text-secondary mb-6">Orders Per Month</h2>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={salesData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E0E0E0" />
-            <XAxis dataKey="month" stroke="#2C3E50" />
-            <YAxis stroke="#2C3E50" />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="orders" fill="#D35400" name="Order Count" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Recent Activity */}
+      {/* Recent Orders */}
       <div className="card">
         <h2 className="text-xl font-bold text-secondary mb-6">Recent Orders</h2>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-secondary text-white">
-                <th className="px-4 py-3 text-left text-sm font-bold">Order ID</th>
+                <th className="px-4 py-3 text-left text-sm font-bold">Order #</th>
                 <th className="px-4 py-3 text-left text-sm font-bold">Store</th>
                 <th className="px-4 py-3 text-left text-sm font-bold">Date</th>
                 <th className="px-4 py-3 text-left text-sm font-bold">Amount</th>
@@ -142,23 +177,107 @@ export default function AdminDashboard() {
               </tr>
             </thead>
             <tbody>
-              {orders.slice(0, 5).map((order) => (
-                <tr key={order.id} className="border-b border-border hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm font-medium text-primary">{order.id}</td>
-                  <td className="px-4 py-3 text-sm">{order.storeName}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{order.date}</td>
-                  <td className="px-4 py-3 text-sm font-bold">${order.total.toFixed(2)}</td>
-                  <td className="px-4 py-3">
-                    <span className={`status-badge ${order.status === "delivered" ? "status-green" : "status-yellow"}`}>
-                      {order.status === "delivered" ? "Delivered" : "In Transit"}
-                    </span>
+              {recent_orders && recent_orders.length > 0 ? (
+                recent_orders.map((order: any) => (
+                  <tr key={order.id} className="border-b border-border hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium text-primary">{order.order_number}</td>
+                    <td className="px-4 py-3 text-sm">{order.stores?.name || 'N/A'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {new Date(order.order_date).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-bold">${parseFloat(order.total_amount).toFixed(2)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`status-badge ${
+                        order.status === 'delivered' ? 'status-green' : 
+                        order.status === 'cancelled' ? 'status-red' : 
+                        'status-yellow'
+                      }`}>
+                        {order.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                    No recent orders
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Low Stock Products */}
+      {low_stock_products && low_stock_products.length > 0 && (
+        <div className="card">
+          <h2 className="text-xl font-bold text-secondary mb-6">Low Stock Products</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-secondary text-white">
+                  <th className="px-4 py-3 text-left text-sm font-bold">SKU</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">Product</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">Stock</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">Threshold</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {low_stock_products.slice(0, 10).map((product: any) => (
+                  <tr key={product.id} className="border-b border-border hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium text-primary">{product.sku}</td>
+                    <td className="px-4 py-3 text-sm">{product.name}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-red-600">{product.stock_quantity}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{product.low_stock_threshold}</td>
+                    <td className="px-4 py-3">
+                      <span className={`status-badge ${
+                        product.stock_status === 'out_of_stock' ? 'status-red' : 'status-yellow'
+                      }`}>
+                        {product.stock_status === 'out_of_stock' ? 'Out of Stock' : 'Low Stock'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Pending Stores */}
+      {pending_stores && pending_stores.length > 0 && (
+        <div className="card">
+          <h2 className="text-xl font-bold text-secondary mb-6">Pending Store Approvals</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-secondary text-white">
+                  <th className="px-4 py-3 text-left text-sm font-bold">Store Name</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">Email</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">City</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">Type</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">Applied</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pending_stores.map((store: any) => (
+                  <tr key={store.id} className="border-b border-border hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium">{store.name}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{store.email}</td>
+                    <td className="px-4 py-3 text-sm">{store.city}</td>
+                    <td className="px-4 py-3 text-sm">{store.store_type}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {new Date(store.created_at).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
