@@ -1,3 +1,5 @@
+import { StoreStatus } from './types'
+
 // API Client utilities for making authenticated requests
 
 export class ApiError extends Error {
@@ -200,6 +202,7 @@ export async function updateStore(id: string, data: {
   province?: string
   postal_code?: string
   website?: string
+  status?: StoreStatus
 }) {
   return apiClient(`/api/stores/${id}`, {
     method: 'PUT',
