@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Check, X, Clock, AlertCircle, Search, Filter, Mail, Phone, MapPin, Building2, TrendingUp, CreditCard } from "lucide-react"
 import { fetchStores, updateStore as updateStoreAPI } from "@/lib/api-client"
-import { Store, StoreStatus } from "@/lib/types"
+import type { Store, StoreStatus } from "@/lib/types"
 
 export default function StoresPage() {
   const [stores, setStores] = useState<Store[]>([])
