@@ -1,4 +1,4 @@
-import { StoreStatus } from './types'
+import type { StoreStatus } from './types'
 
 // API Client utilities for making authenticated requests
 
